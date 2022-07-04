@@ -172,7 +172,7 @@ impl Room {
 
         // transitions
         
-        let transition_normal = graphics::Mesh::new_polygon(
+        let transition_normal_fill = graphics::Mesh::new_polygon(
             ctx,
             graphics::DrawMode::fill(),
             &[
@@ -183,9 +183,34 @@ impl Room {
             ],
             graphics::Color::WHITE,
         )?;
-        let transition_door = graphics::Mesh::new_polygon(
+        let transition_door_fill = graphics::Mesh::new_polygon(
             ctx,
             graphics::DrawMode::fill(),
+            &[
+                [-6.0, 5.0],
+                [-6.0, -8.0],
+                [-4.0, -13.0],
+                [0.0, -15.0],
+                [4.0, -13.0],
+                [6.0, -8.0],
+                [6.0, 5.0],
+            ],
+            graphics::Color::WHITE,
+        )?;
+        let transition_normal_stroke = graphics::Mesh::new_polygon(
+            ctx,
+            graphics::DrawMode::stroke(2.0),
+            &[
+                [-1.0, -12.0],
+                [1.0, -12.0],
+                [6.0, 4.0],
+                [-6.0, 4.0]
+            ],
+            graphics::Color::WHITE,
+        )?;
+        let transition_door_stroke = graphics::Mesh::new_polygon(
+            ctx,
+            graphics::DrawMode::stroke(2.0),
             &[
                 [-6.0, 5.0],
                 [-6.0, -8.0],
@@ -204,6 +229,9 @@ impl Room {
             let transition_id = format!("{key}[{n}]");
             let revealed = rando_data.visited_transitions.contains(&transition_id);
 
+            let scale = if revealed { 0.8 } else { 1.0 };
+            transform.scale(scale, scale);
+
             let mut color = if revealed {
                 Color::from_rgba(150, 160, 150, 127)
             } else { 
@@ -219,7 +247,7 @@ impl Room {
 
             if n.starts_with("door") || n.starts_with("room") {
                 let param: DrawParam = Into::<DrawParam>::into(&transform).color(color);
-                graphics::draw(ctx, &transition_door, param)?;
+                graphics::draw(ctx, if revealed { &transition_door_stroke } else { &transition_door_fill }, param)?;
                 // graphics::draw(ctx, &rect, &transform);
             } else {
                 if n.starts_with("left") {
@@ -230,7 +258,7 @@ impl Room {
                     transform.rotate(180.0_f32.to_radians());
                 }
                 let param: DrawParam = Into::<DrawParam>::into(&transform).color(color);
-                graphics::draw(ctx, &transition_normal, param)?;
+                graphics::draw(ctx, if revealed { &transition_normal_stroke } else { &transition_normal_fill }, param)?;
                 // graphics::draw(ctx, &rect, &transform);
             }
             
