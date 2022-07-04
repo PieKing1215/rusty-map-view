@@ -170,6 +170,15 @@ impl Room {
             graphics::Color::from_rgba(0, 255, 0, 255)
         )?;
 
+        // room name
+        if settings.draw_room_names {
+            transform.push();
+            transform.translate(bounds.x, bounds.y + bounds.h);
+            // TODO: cache
+            graphics::Text::new(key.clone()).set_font(Font::default(), PxScale::from(12.0)).draw(ctx, (&transform).into())?;
+            transform.pop();
+        }
+
         // transitions
         
         let transition_normal_fill = graphics::Mesh::new_polygon(
@@ -320,15 +329,6 @@ impl Room {
     
                 transform.pop();
             }
-        }
-
-        // room name
-        if settings.draw_room_names {
-            transform.push();
-            transform.translate(bounds.x, bounds.y + bounds.h);
-            // TODO: cache
-            graphics::Text::new(key.clone()).set_font(Font::default(), PxScale::from(12.0)).draw(ctx, (&transform).into())?;
-            transform.pop();
         }
 
         Ok(())
