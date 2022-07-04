@@ -10,6 +10,7 @@ use ggez::{
     graphics::{self, Color, DrawParam, Drawable, Rect},
     Context, GameResult, conf::{WindowSetup, WindowMode}, GameError, mint::Point2, input::mouse::CursorIcon,
 };
+use ggez_egui::EguiBackend;
 use json::JsonValue;
 use parity_ws::{Message, Sender};
 use util::{transform_stack::TransformStack, split::GetSplit, color_ext::ColorExt};
@@ -31,6 +32,7 @@ struct MainState {
     click_start_y: f32,
     path_target: Option<String>,
     highlight_path: Option<Vec<String>>,
+    egui_backend: EguiBackend,
 }
 
 impl MainState {
@@ -80,7 +82,7 @@ impl MainState {
             }
         });
 
-        Ok(MainState { pos_x: 0.0, circle, recv, shutdown: send_shutdown, listen_thread: Some(listen_thread), shutdown_thread: Some(shutdown_thread), game_state: GameState::Unloaded, map_data, last_transition_time: Instant::now(), asset_cache: HashMap::new(), click_start_x: 0.0, click_start_y: 0.0, path_target: None, highlight_path: None })
+        Ok(MainState { pos_x: 0.0, circle, recv, shutdown: send_shutdown, listen_thread: Some(listen_thread), shutdown_thread: Some(shutdown_thread), game_state: GameState::Unloaded, map_data, last_transition_time: Instant::now(), asset_cache: HashMap::new(), click_start_x: 0.0, click_start_y: 0.0, path_target: None, highlight_path: None, egui_backend: EguiBackend::default() })
     }
 
     fn on_message(&mut self, json: JsonValue, ctx: &mut Context) -> GameResult {
@@ -434,6 +436,13 @@ impl MainState {
 
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
+        let egui_ctx = self.egui_backend.ctx();
+		egui::Window::new("Rusty Map View").show(&egui_ctx, |ui| {
+			if ui.button("quit").clicked() {
+				ggez::event::quit(ctx);
+			}
+		});
+
         self.pos_x = self.pos_x % 800.0 + 1.0;
 
         if let Ok(msg) = self.recv.try_recv() {
@@ -625,6 +634,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
             .draw(ctx, DrawParam::default()
                 .dest([8.0, 2.0]))?;
         
+        graphics::draw(ctx, &self.egui_backend, ([0.0, 0.0],))?;
+
         graphics::present(ctx)?;
 
         Ok(())
@@ -648,6 +659,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         x: f32,
         y: f32,
     ) {
+        self.egui_backend.input.mouse_button_down_event(button);
 
         self.click_start_x = x;
         self.click_start_y = y;
@@ -686,6 +698,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
         _x: f32,
         _y: f32,
     ) {
+        self.egui_backend.input.mouse_button_up_event(button);
+
         // if button == MouseButton::Left && (self.click_start_x - x).abs() <= 2.0 && (self.click_start_y - y).abs() <= 2.0 {
         //     let hovered_room = self.get_room_at_window_position(ctx, [x, y]).cloned();
 
@@ -705,11 +719,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn mouse_motion_event(
         &mut self,
         ctx: &mut Context,
-        _x: f32,
-        _y: f32,
+        x: f32,
+        y: f32,
         dx: f32,
         dy: f32,
     ) {
+        self.egui_backend.input.mouse_motion_event(x, y);
+
         if let GameState::Loaded(state) = &mut self.game_state {
             if ggez::input::mouse::button_pressed(ctx, MouseButton::Left) {
                 if let Some(sel_room) = &state.selected_room {

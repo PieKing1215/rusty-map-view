@@ -11,6 +11,8 @@ nalgebra = "0.31"
 nalgebra-glm = "0.17"
 base64 = "0.13"
 image = "0.24"
+egui = "0.18"
+ggez-egui = "0.2"
 
 [profile.dev]
 opt-level = 1
