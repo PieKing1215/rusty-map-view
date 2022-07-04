@@ -13,7 +13,7 @@ use ggez::{
 use json::JsonValue;
 use nalgebra::ComplexField;
 use parity_ws::{Message, Sender};
-use util::{transform_stack::TransformStack, split::GetSplit};
+use util::{transform_stack::TransformStack, split::GetSplit, color_ext::ColorExt};
 
 use crate::{state::{GameState, LoadedState, Camera, CameraTarget}, data::{RandoData, transition::Transition}, util::rect_ext::RectExt};
 
@@ -509,17 +509,27 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     for (k, tr) in &cur_room.transitions {
                         let transition = format!("{}[{k}]", key);
                         if state.rando_data.visited_transitions.contains(&transition) {
-                            if let Some((to_room, to_transition)) = Transition::get_transition_info(state.rando_data.transition_map.get(&transition).unwrap_or(&transition)) {
+                            if let Some((to_room, to_transition_key)) = Transition::get_transition_info(state.rando_data.transition_map.get(&transition).unwrap_or(&transition)) {
                                 if state.rando_data.room_positions.contains_key(&to_room) {
                                     if let Some(next_room) = other_rooms.get(&to_room) {
                                         let next_bounds = next_room.calc_bounds();
 
-                                        if let Some(to_transition) = next_room.transitions.get(&to_transition) {
+                                        if let Some(to_transition) = next_room.transitions.get(&to_transition_key) {
                                             // move so src lines up with dst
                                             // dx += ((-tr.x + to_transition.x) - this_x) * 0.0025;
                                             // dy += ((-(bounds.h - tr.y) + (next_bounds.h - to_transition.y)) - this_y) * 0.0025;
 
                                             let (x2, y2) = state.rando_data.room_positions.get(&to_room).unwrap();
+
+                                            let to_transition_id = format!("{}[{to_transition_key}]", to_room);
+
+                                            let mut color = graphics::Color::BLUE;
+                                            if let Some(path) = &self.highlight_path {
+                                                if let Some(i) = path.iter().position(|path_tr| path_tr == &transition || path_tr == &to_transition_id) {
+                                                    let thru = ((ctx.time.time_since_start().as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
+                                                    color = color.lerp(&Color::from_rgb(255, 100, 160), thru);
+                                                }
+                                            }
 
                                             graphics::Mesh::new_line(
                                                 ctx, 
@@ -528,7 +538,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                                                     [-x + *x2 + to_transition.x, -y + *y2 + (next_bounds.h - to_transition.y)],
                                                 ], 
                                                 2.0,
-                                                graphics::Color::BLUE)?.draw(&mut canvas, (&transform).into());
+                                                color)?.draw(&mut canvas, (&transform).into());
 
                                         }
                                     }
