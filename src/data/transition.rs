@@ -7,6 +7,7 @@ pub struct Transition {
 }
 
 impl Transition {
+    #[must_use]
     pub fn get_transition_info(transition: &str) -> Option<(String, String)> {
         transition
             .split_once('[')
@@ -19,7 +20,7 @@ impl TryFrom<&JsonValue> for Transition {
 
     fn try_from(json: &JsonValue) -> Result<Self, Self::Error> {
         Ok(Self {
-            to: json["to"].as_str().map(|s| s.into()),
+            to: json["to"].as_str().map(Into::into),
             x: json["x"].as_f32().unwrap_or(0.0),
             y: json["y"].as_f32().unwrap_or(0.0),
         })

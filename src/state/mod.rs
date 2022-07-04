@@ -1,5 +1,6 @@
 use crate::data::{MapData, RandoData};
 
+#[allow(clippy::large_enum_variant)]
 pub enum GameState {
     Unloaded,
     Loaded(LoadedState),

@@ -1,6 +1,7 @@
 use ggez::graphics::Color;
 
 pub trait ColorExt {
+    #[must_use]
     fn lerp(&self, other: &Self, thru: f32) -> Self;
 }
 

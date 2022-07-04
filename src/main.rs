@@ -1,4 +1,16 @@
+#![deny(clippy::all)]
+#![allow(clippy::cargo)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_lossless)]
 #![allow(clippy::expect_fun_call)]
+#![allow(clippy::module_name_repetitions)]
 
 pub mod data;
 pub mod settings;
@@ -122,7 +134,7 @@ impl MainState {
         })
     }
 
-    fn on_message(&mut self, json: JsonValue, ctx: &mut Context) -> GameResult {
+    fn on_message(&mut self, json: &JsonValue, ctx: &mut Context) -> GameResult {
         // println!("{}", json["type"]);
         match json["type"].as_str() {
             Some("loadSave") => {
@@ -299,6 +311,7 @@ impl MainState {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)] // TODO
     fn update_room_positions(&mut self) {
         if let GameState::Loaded(state) = &mut self.game_state {
             let rough_factor = 1.0
@@ -313,7 +326,7 @@ impl MainState {
 
             #[allow(clippy::needless_collect)] // actually needed
             let v: Vec<_> = state.rando_data.room_positions.keys().cloned().collect();
-            for key in v.into_iter() {
+            for key in v {
                 if key == state.current_room {
                     let (this_x, this_y) = state.rando_data.room_positions.get_mut(&key).unwrap();
                     *this_x = 0.0;
@@ -428,11 +441,12 @@ impl MainState {
                             tr_other_bounds.inflate(10.0);
 
                             if tr_my_bounds.overlaps(&tr_other_bounds) {
-                                let ox1 = tr_my_bounds.left().max(tr_other_bounds.left());
-                                let oy1 = tr_my_bounds.top().max(tr_other_bounds.top());
-                                let ox2 = tr_my_bounds.right().min(tr_other_bounds.right());
-                                let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
-                                let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
+                                let o_left = tr_my_bounds.left().max(tr_other_bounds.left());
+                                let o_top = tr_my_bounds.top().max(tr_other_bounds.top());
+                                let o_right = tr_my_bounds.right().min(tr_other_bounds.right());
+                                let o_bottom = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
+                                let overlap_rect =
+                                    Rect::new(o_left, o_top, o_right - o_left, o_bottom - o_top);
 
                                 move_x += (tr_my_bounds.center().x - overlap_rect.center().x)
                                     * 0.00005
@@ -457,11 +471,12 @@ impl MainState {
                             tr_other_bounds.inflate(25.0);
 
                             if tr_my_bounds.overlaps(&tr_other_bounds) {
-                                let ox1 = tr_my_bounds.left().max(tr_other_bounds.left());
-                                let oy1 = tr_my_bounds.top().max(tr_other_bounds.top());
-                                let ox2 = tr_my_bounds.right().min(tr_other_bounds.right());
-                                let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
-                                let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
+                                let o_left = tr_my_bounds.left().max(tr_other_bounds.left());
+                                let o_top = tr_my_bounds.top().max(tr_other_bounds.top());
+                                let o_right = tr_my_bounds.right().min(tr_other_bounds.right());
+                                let o_bottom = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
+                                let overlap_rect =
+                                    Rect::new(o_left, o_top, o_right - o_left, o_bottom - o_top);
 
                                 move_x += (tr_my_bounds.center().x - tr_other_bounds.center().x)
                                     * 0.0000005
@@ -583,7 +598,7 @@ impl MainState {
                                 .unwrap_or(&transition),
                         ) {
                             if unvisited.contains(&to_room) {
-                                if let Some(v) = dist_from_src.get(&to_room).cloned() {
+                                if let Some(v) = dist_from_src.get(&to_room).copied() {
                                     if cost < v {
                                         dist_from_src.insert(to_room.clone(), cost);
                                         prev_transition.insert(to_room, transition);
@@ -620,7 +635,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         self.pos_x = self.pos_x % 800.0 + 1.0;
 
         if let Ok(msg) = self.recv.try_recv() {
-            self.on_message(msg, ctx)?;
+            self.on_message(&msg, ctx)?;
         }
 
         self.update_room_positions();
@@ -632,6 +647,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)] // TODO
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, [0.0, 0.0, 0.0, 1.0].into());
 
@@ -790,7 +806,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         }
                     }
 
-                    transform.pop()
+                    transform.pop();
                 }
             }
 
@@ -907,7 +923,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         if !self
             .egui_ctx
             .as_ref()
-            .map_or(false, |ectx| ectx.wants_pointer_input())
+            .map_or(false, egui::Context::wants_pointer_input)
         {
             self.click_start_x = x;
             self.click_start_y = y;
@@ -959,7 +975,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         if !self
             .egui_ctx
             .as_ref()
-            .map_or(false, |ectx| ectx.wants_pointer_input())
+            .map_or(false, egui::Context::wants_pointer_input)
         {
             if button == MouseButton::Left {
                 if let GameState::Loaded(state) = &mut self.game_state {
@@ -975,7 +991,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         if !self
             .egui_ctx
             .as_ref()
-            .map_or(false, |ectx| ectx.wants_pointer_input())
+            .map_or(false, egui::Context::wants_pointer_input)
         {
             if let GameState::Loaded(state) = &mut self.game_state {
                 if ggez::input::mouse::button_pressed(ctx, MouseButton::Left) {

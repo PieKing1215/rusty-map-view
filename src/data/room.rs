@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Into};
 
 use ggez::{
     graphics::{self, Color, DrawParam, Drawable, Font, PxScale, Rect, StrokeOptions},
@@ -24,6 +24,7 @@ pub struct Room {
 }
 
 impl Room {
+    #[must_use]
     pub fn calc_bounds(&self) -> Rect {
         let mut min_x: f32 = 10000.0;
         let mut max_x: f32 = -10000.0;
@@ -62,7 +63,7 @@ impl Room {
             max_y += (20.0 - (max_y - min_y)) / 2.0;
         }
 
-        if min_x == 10000.0 {
+        if (min_x - 10000.0).abs() < f32::EPSILON {
             Rect { x: -10.0, y: -10.0, w: 20.0, h: 20.0 }
         } else {
             Rect {
@@ -74,6 +75,8 @@ impl Room {
         }
     }
 
+    #[allow(clippy::too_many_lines)] // TODO
+    #[allow(clippy::too_many_arguments)] // TODO
     pub fn draw(
         &mut self,
         ctx: &mut ggez::Context,
@@ -103,6 +106,7 @@ impl Room {
 
         transform.translate(0.0, bounds.h);
 
+        #[allow(clippy::match_same_arms)]
         let (stroke_color, fill_color) = match self.area.as_deref() {
             Some("Abyss") => (0xADACAD, 0x2D2D2D),          //Ancient Basin
             Some("Cliffs") => (0x6B6B6B, 0x1B1B1B),         //Howling Cliffs
@@ -117,8 +121,7 @@ impl Room {
             Some("Mines") => (0xE4BEE8, 0x372F38),          //Crystal Peak
             Some("RestingGrounds") => (0xFEC7A2, 0x382D24), //Resting Grounds
             Some("Room") => (0xFEA2AD, 0x382425),           //Room
-            Some("Ruins1") => (0xB8C3FF, 0x292C3C),         //City of Tears
-            Some("Ruins2") => (0xB8C3FF, 0x292C3C),         //City of Tears
+            Some("Ruins1" | "Ruins2") => (0xB8C3FF, 0x292C3C), //City of Tears
             Some("Town") => (0xA2A2A2, 0x2B2B2B),           //Dirtmouth
             Some("Waterways") => (0x98FFFF, 0x243D3C),      //Royal Waterways
             Some("White_Palace") => (0xD8D8D8, 0x333333),   //White Palace
@@ -378,7 +381,7 @@ impl TryFrom<&JsonValue> for Room {
     type Error = String;
 
     fn try_from(json: &JsonValue) -> Result<Self, Self::Error> {
-        let area = json["area"].as_str().map(|s| s.into());
+        let area = json["area"].as_str().map(Into::into);
 
         let benches = json["benches"]
             .members()
@@ -399,8 +402,8 @@ impl TryFrom<&JsonValue> for Room {
             .map(|(k, v)| Ok((k.into(), v.try_into()?)))
             .collect::<Result<HashMap<String, Item>, Self::Error>>()?;
 
-        let name = json["name"].as_str().map(|s| s.into());
-        let randomizer_area = json["randomizerArea"].as_str().map(|s| s.into());
+        let name = json["name"].as_str().map(Into::into);
+        let randomizer_area = json["randomizerArea"].as_str().map(Into::into);
 
         let split_room = if json["splitRoom"].is_array() {
             Some(
@@ -411,7 +414,7 @@ impl TryFrom<&JsonValue> for Room {
                             .map(|tr| {
                                 tr.as_str()
                                     .ok_or("Room has invalid splitRoom entry")
-                                    .map(|s| s.into())
+                                    .map(Into::into)
                             })
                             .collect()
                     })

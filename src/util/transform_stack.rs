@@ -7,6 +7,7 @@ pub struct TransformStack {
 }
 
 impl TransformStack {
+    #[must_use]
     pub fn new() -> Self {
         TransformStack { stack: vec![Matrix4::identity()] }
     }
@@ -50,7 +51,7 @@ impl TransformStack {
         );
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn transform<T: Into<f64>>(&self, point: (T, T)) -> (f32, f32) {
         let t = self.stack.last().unwrap();
         let v = t.transform_point(&Point3::new(
@@ -66,7 +67,7 @@ impl TransformStack {
         )
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn transform_int<T: Into<f64>>(&self, point: (T, T)) -> (i32, i32) {
         let t = self.stack.last().unwrap();
         let v = t.transform_point(&Point3::new(
