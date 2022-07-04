@@ -7,10 +7,10 @@ pub struct Transition {
 }
 
 impl Transition {
-    pub fn get_transition_info(transition: &String) -> Option<(String, String)> {
+    pub fn get_transition_info(transition: &str) -> Option<(String, String)> {
         transition
-            .split_once("[")
-            .map(|t| (t.0.into(), t.1.trim_end_matches("]").into()))
+            .split_once('[')
+            .map(|t| (t.0.into(), t.1.trim_end_matches(']').into()))
     }
 }
 

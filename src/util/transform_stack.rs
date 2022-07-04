@@ -121,17 +121,17 @@ impl Default for TransformStack {
     }
 }
 
-impl Into<DrawParam> for &TransformStack {
-    fn into(self) -> DrawParam {
-        let raw: [[f32; 4]; 4] = (*self.stack.last().unwrap()).into();
+impl From<&TransformStack> for DrawParam {
+    fn from(ts: &TransformStack) -> Self {
+        let raw: [[f32; 4]; 4] = (*ts.stack.last().unwrap()).into();
         let m: ggez::mint::ColumnMatrix4<f32> = ggez::mint::ColumnMatrix4::from(raw);
         DrawParam::default().transform(m)
     }
 }
 
-impl Into<DrawParam> for TransformStack {
-    fn into(self) -> DrawParam {
-        let raw: [[f32; 4]; 4] = (*self.stack.last().unwrap()).into();
+impl From<TransformStack> for DrawParam {
+    fn from(ts: TransformStack) -> Self {
+        let raw: [[f32; 4]; 4] = (*ts.stack.last().unwrap()).into();
         let m: ggez::mint::ColumnMatrix4<f32> = ggez::mint::ColumnMatrix4::from(raw);
         DrawParam::default().transform(m)
     }

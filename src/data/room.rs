@@ -37,14 +37,14 @@ impl Room {
             max_y = max_y.max(-*y + 5.0);
         }
 
-        for (_, i) in &self.items {
+        for i in self.items.values() {
             min_x = min_x.min(i.x - 5.0);
             max_x = max_x.max(i.x + 5.0);
             min_y = min_y.min(-i.y - 5.0);
             max_y = max_y.max(-i.y + 5.0);
         }
 
-        for (_, t) in &self.transitions {
+        for t in self.transitions.values() {
             min_x = min_x.min(t.x);
             max_x = max_x.max(t.x);
             min_y = min_y.min(-t.y);
@@ -103,7 +103,7 @@ impl Room {
 
         transform.translate(0.0, bounds.h);
 
-        let (stroke_color, fill_color) = match self.area.as_ref().map(|s| s.as_str()) {
+        let (stroke_color, fill_color) = match self.area.as_deref() {
             Some("Abyss") => (0xADACAD, 0x2D2D2D),          //Ancient Basin
             Some("Cliffs") => (0x6B6B6B, 0x1B1B1B),         //Howling Cliffs
             Some("Crossroads") => (0x9DC1DA, 0x2B353B),     //Forgotten Crossroads
@@ -192,15 +192,6 @@ impl Room {
 
             graphics::draw(ctx, &rect, &transform)?;
         }
-
-        let rect = graphics::Mesh::new_circle(
-            ctx,
-            graphics::DrawMode::Stroke(StrokeOptions::default()),
-            [0.0, 0.0],
-            2.0,
-            1.0,
-            graphics::Color::from_rgba(0, 255, 0, 255),
-        )?;
 
         // room name
         if settings.draw_room_names {
@@ -332,7 +323,7 @@ impl Room {
             2.0,
             graphics::Color::YELLOW,
         )?;
-        for (_, i) in &self.items {
+        for i in self.items.values() {
             transform.push();
             transform.translate(i.x, -i.y);
 
@@ -344,12 +335,12 @@ impl Room {
         // benches
 
         if let Some(img) = asset_cache.get("pin_bench") {
-            let bench = graphics::Mesh::new_rectangle(
-                ctx,
-                graphics::DrawMode::fill(),
-                Rect::new(-10.0, -4.0 + 3.0, 20.0, 8.0),
-                graphics::Color::CYAN,
-            )?;
+            // let bench = graphics::Mesh::new_rectangle(
+            //     ctx,
+            //     graphics::DrawMode::fill(),
+            //     Rect::new(-10.0, -4.0 + 3.0, 20.0, 8.0),
+            //     graphics::Color::CYAN,
+            // )?;
             for (x, y) in &self.benches {
                 transform.push();
                 transform.translate(*x, -*y);

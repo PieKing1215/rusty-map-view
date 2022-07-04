@@ -1,3 +1,5 @@
+#![allow(clippy::expect_fun_call)]
+
 pub mod data;
 pub mod settings;
 pub mod state;
@@ -64,7 +66,7 @@ impl MainState {
 
         println!("Loading map data...");
         let map_data = data::load_mapdata(include_str!("../res/mapdata.json"))
-            .map_err(|s| GameError::CustomError(s))?;
+            .map_err(GameError::CustomError)?;
 
         let (send, recv) = mpsc::sync_channel(10);
         let (send_shutdown, recv_shutdown) = mpsc::sync_channel(1);
@@ -98,7 +100,7 @@ impl MainState {
             }
         });
 
-        let mut egui_backend = EguiBackend::default();
+        let egui_backend = EguiBackend::default();
         Ok(MainState {
             pos_x: 0.0,
             circle,
@@ -239,11 +241,11 @@ impl MainState {
 
         let rando_data = data["PolymorphicModData"]["RandomizerMod"]
             .as_str()
-            .ok_or("Missing data.PolymorphicModData.RandomizerMod".into())
+            .ok_or_else(|| "Missing data.PolymorphicModData.RandomizerMod".into())
             .and_then(|raw_json| json::parse(raw_json).map_err(|json_err| json_err.to_string()))?;
         let rando_ctx = data["PolymorphicModData"]["context"]
             .as_str()
-            .ok_or("Missing data.PolymorphicModData.context".into())
+            .ok_or_else(|| "Missing data.PolymorphicModData.context".into())
             .and_then(|raw_json| json::parse(raw_json).map_err(|json_err| json_err.to_string()))?;
 
         let mut transition_map = HashMap::new();
@@ -309,6 +311,7 @@ impl MainState {
                     .clamp(0.0, 1.0);
             // let rough_factor = 1.0;
 
+            #[allow(clippy::needless_collect)] // actually needed
             let v: Vec<_> = state.rando_data.room_positions.keys().cloned().collect();
             for key in v.into_iter() {
                 if key == state.current_room {
@@ -317,178 +320,166 @@ impl MainState {
                     *this_y = 0.0;
                 } else if state.selected_room.as_ref() == Some(&key) && state.dragging_room {
                     // don't move
-                } else {
-                    if let Some((cur_room, other_rooms)) =
-                        self.map_data.rooms.split(&key).as_deref()
-                    {
-                        let bounds = cur_room.calc_bounds();
+                } else if let Some((cur_room, other_rooms)) =
+                    self.map_data.rooms.split(&key).as_deref()
+                {
+                    let bounds = cur_room.calc_bounds();
 
-                        let (this_x, this_y) =
-                            state.rando_data.room_positions.get(&key).unwrap().clone();
+                    let (this_x, this_y) = *state.rando_data.room_positions.get(&key).unwrap();
 
-                        let mut move_x = 0.0;
-                        let mut move_y = 0.0;
-                        let mut i = 0;
+                    let mut move_x = 0.0;
+                    let mut move_y = 0.0;
+                    // let mut i = 0;
 
-                        // try to line up transitions
-                        for (k, tr) in &cur_room.transitions {
-                            let transition = format!("{}[{k}]", key);
-                            if state.rando_data.visited_transitions.contains(&transition) {
-                                if let Some((to_room, to_transition_k)) =
-                                    Transition::get_transition_info(
-                                        state
-                                            .rando_data
-                                            .transition_map
-                                            .get(&transition)
-                                            .unwrap_or(&transition),
-                                    )
-                                {
-                                    if state.rando_data.room_positions.contains_key(&to_room) {
-                                        if let Some(next_room) = other_rooms.get(&to_room) {
-                                            let next_bounds = next_room.calc_bounds();
+                    // try to line up transitions
+                    for (k, tr) in &cur_room.transitions {
+                        let transition = format!("{}[{k}]", key);
+                        if state.rando_data.visited_transitions.contains(&transition) {
+                            if let Some((to_room, to_transition_k)) =
+                                Transition::get_transition_info(
+                                    state
+                                        .rando_data
+                                        .transition_map
+                                        .get(&transition)
+                                        .unwrap_or(&transition),
+                                )
+                            {
+                                if state.rando_data.room_positions.contains_key(&to_room) {
+                                    if let Some(next_room) = other_rooms.get(&to_room) {
+                                        let next_bounds = next_room.calc_bounds();
 
-                                            if let Some(to_transition) =
-                                                next_room.transitions.get(&to_transition_k)
+                                        if let Some(to_transition) =
+                                            next_room.transitions.get(&to_transition_k)
+                                        {
+                                            let (other_x, other_y) = *state
+                                                .rando_data
+                                                .room_positions
+                                                .get(&to_room)
+                                                .unwrap();
+
+                                            // move so src lines up with dst
+                                            let strength = 0.005 + 0.4 * rough_factor;
+                                            let mut strength_x;
+                                            let mut strength_y;
+
+                                            let dx = (-tr.x + to_transition.x) - this_x + other_x;
+                                            let dy = (-(bounds.h - tr.y)
+                                                + (next_bounds.h - to_transition.y))
+                                                - this_y
+                                                + other_y;
+
+                                            if (k.starts_with("right")
+                                                && to_transition_k.starts_with("left"))
+                                                || (k.starts_with("left")
+                                                    && to_transition_k.starts_with("right"))
                                             {
-                                                let (other_x, other_y) = state
-                                                    .rando_data
-                                                    .room_positions
-                                                    .get(&to_room)
-                                                    .unwrap()
-                                                    .clone();
-
-                                                // move so src lines up with dst
-                                                let strength = 0.005 + 0.4 * rough_factor;
-                                                let mut strength_x = 1.0;
-                                                let mut strength_y = 1.0;
-
-                                                let dx =
-                                                    (-tr.x + to_transition.x) - this_x + other_x;
-                                                let dy = (-(bounds.h - tr.y)
-                                                    + (next_bounds.h - to_transition.y))
-                                                    - this_y
-                                                    + other_y;
-
-                                                if (k.starts_with("right")
-                                                    && to_transition_k.starts_with("left"))
-                                                    || (k.starts_with("left")
-                                                        && to_transition_k.starts_with("right"))
-                                                {
-                                                    strength_x = ((dx.abs() - 200.0) / 200.0)
-                                                        .clamp(0.0, 0.5);
-                                                    if (k.starts_with("right") && dx < 0.0)
-                                                        || (k.starts_with("left") && dx > 0.0)
-                                                    {
-                                                        strength_x = 2.0;
-                                                    }
-                                                    strength_y = 2.0;
-                                                } else if (k.starts_with("top")
-                                                    && to_transition_k.starts_with("bot"))
-                                                    || (k.starts_with("bot")
-                                                        && to_transition_k.starts_with("top"))
+                                                strength_x =
+                                                    ((dx.abs() - 200.0) / 200.0).clamp(0.0, 0.5);
+                                                if (k.starts_with("right") && dx < 0.0)
+                                                    || (k.starts_with("left") && dx > 0.0)
                                                 {
                                                     strength_x = 2.0;
-                                                    strength_y = ((dy.abs() - 200.0) / 200.0)
-                                                        .clamp(0.0, 0.5);
-                                                    if (k.starts_with("top") && dy > 0.0)
-                                                        || (k.starts_with("bot") && dy < 0.0)
-                                                    {
-                                                        strength_y = 2.0;
-                                                    }
-                                                } else {
-                                                    strength_x = ((dx.abs() - 400.0) / 400.0)
-                                                        .clamp(0.0, 0.5);
-                                                    strength_y = ((dy.abs() - 400.0) / 400.0)
-                                                        .clamp(0.0, 0.5);
                                                 }
-
-                                                move_x += dx * strength * strength_x;
-                                                move_y += dy * strength * strength_y;
-
-                                                i += 1;
+                                                strength_y = 2.0;
+                                            } else if (k.starts_with("top")
+                                                && to_transition_k.starts_with("bot"))
+                                                || (k.starts_with("bot")
+                                                    && to_transition_k.starts_with("top"))
+                                            {
+                                                strength_x = 2.0;
+                                                strength_y =
+                                                    ((dy.abs() - 200.0) / 200.0).clamp(0.0, 0.5);
+                                                if (k.starts_with("top") && dy > 0.0)
+                                                    || (k.starts_with("bot") && dy < 0.0)
+                                                {
+                                                    strength_y = 2.0;
+                                                }
+                                            } else {
+                                                strength_x =
+                                                    ((dx.abs() - 400.0) / 400.0).clamp(0.0, 0.5);
+                                                strength_y =
+                                                    ((dy.abs() - 400.0) / 400.0).clamp(0.0, 0.5);
                                             }
+
+                                            move_x += dx * strength * strength_x;
+                                            move_y += dy * strength * strength_y;
+
+                                            // i += 1;
                                         }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        // remove intersections
-                        for (other_key, other_room) in other_rooms.iter() {
-                            if state.rando_data.room_positions.contains_key(other_key) {
-                                let other_bounds = other_room.calc_bounds();
-                                let (other_x, other_y) = state
-                                    .rando_data
-                                    .room_positions
-                                    .get(other_key)
-                                    .unwrap()
-                                    .clone();
+                    // remove intersections
+                    for (other_key, other_room) in other_rooms.iter() {
+                        if state.rando_data.room_positions.contains_key(other_key) {
+                            let other_bounds = other_room.calc_bounds();
+                            let (other_x, other_y) =
+                                *state.rando_data.room_positions.get(other_key).unwrap();
 
-                                let mut tr_my_bounds = bounds.clone();
-                                tr_my_bounds.translate([this_x, this_y + bounds.h]);
-                                tr_my_bounds.inflate(10.0);
+                            let mut tr_my_bounds = bounds; // copy
+                            tr_my_bounds.translate([this_x, this_y + bounds.h]);
+                            tr_my_bounds.inflate(10.0);
 
-                                let mut tr_other_bounds = other_bounds.clone();
-                                tr_other_bounds.translate([other_x, other_y + other_bounds.h]);
-                                tr_other_bounds.inflate(10.0);
+                            let mut tr_other_bounds = other_bounds; // copy
+                            tr_other_bounds.translate([other_x, other_y + other_bounds.h]);
+                            tr_other_bounds.inflate(10.0);
 
-                                if tr_my_bounds.overlaps(&tr_other_bounds) {
-                                    let ox1 = tr_my_bounds.left().max(tr_other_bounds.left());
-                                    let oy1 = tr_my_bounds.top().max(tr_other_bounds.top());
-                                    let ox2 = tr_my_bounds.right().min(tr_other_bounds.right());
-                                    let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
-                                    let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
+                            if tr_my_bounds.overlaps(&tr_other_bounds) {
+                                let ox1 = tr_my_bounds.left().max(tr_other_bounds.left());
+                                let oy1 = tr_my_bounds.top().max(tr_other_bounds.top());
+                                let ox2 = tr_my_bounds.right().min(tr_other_bounds.right());
+                                let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
+                                let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
 
-                                    move_x += (tr_my_bounds.center().x - overlap_rect.center().x)
-                                        * 0.00005
-                                        * overlap_rect.w
-                                        * overlap_rect.h
-                                        * (1.0 - rough_factor);
-                                    move_y += (tr_my_bounds.center().y - overlap_rect.center().y)
-                                        * 0.00005
-                                        * overlap_rect.w
-                                        * overlap_rect.h
-                                        * (1.0 - rough_factor);
-                                }
+                                move_x += (tr_my_bounds.center().x - overlap_rect.center().x)
+                                    * 0.00005
+                                    * overlap_rect.w
+                                    * overlap_rect.h
+                                    * (1.0 - rough_factor);
+                                move_y += (tr_my_bounds.center().y - overlap_rect.center().y)
+                                    * 0.00005
+                                    * overlap_rect.w
+                                    * overlap_rect.h
+                                    * (1.0 - rough_factor);
+                            }
 
-                                // wide area
+                            // wide area
 
-                                let mut tr_my_bounds = bounds.clone();
-                                tr_my_bounds.translate([this_x, this_y + bounds.h]);
-                                tr_my_bounds.inflate(25.0);
+                            let mut tr_my_bounds = bounds; // copy
+                            tr_my_bounds.translate([this_x, this_y + bounds.h]);
+                            tr_my_bounds.inflate(25.0);
 
-                                let mut tr_other_bounds = other_bounds.clone();
-                                tr_other_bounds.translate([other_x, other_y + other_bounds.h]);
-                                tr_other_bounds.inflate(25.0);
+                            let mut tr_other_bounds = other_bounds; // copy
+                            tr_other_bounds.translate([other_x, other_y + other_bounds.h]);
+                            tr_other_bounds.inflate(25.0);
 
-                                if tr_my_bounds.overlaps(&tr_other_bounds) {
-                                    let ox1 = tr_my_bounds.left().max(tr_other_bounds.left());
-                                    let oy1 = tr_my_bounds.top().max(tr_other_bounds.top());
-                                    let ox2 = tr_my_bounds.right().min(tr_other_bounds.right());
-                                    let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
-                                    let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
+                            if tr_my_bounds.overlaps(&tr_other_bounds) {
+                                let ox1 = tr_my_bounds.left().max(tr_other_bounds.left());
+                                let oy1 = tr_my_bounds.top().max(tr_other_bounds.top());
+                                let ox2 = tr_my_bounds.right().min(tr_other_bounds.right());
+                                let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
+                                let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
 
-                                    move_x += (tr_my_bounds.center().x
-                                        - tr_other_bounds.center().x)
-                                        * 0.0000005
-                                        * overlap_rect.w
-                                        * overlap_rect.h
-                                        * (1.0 - rough_factor);
-                                    move_y += (tr_my_bounds.center().y
-                                        - tr_other_bounds.center().y)
-                                        * 0.0000005
-                                        * overlap_rect.w
-                                        * overlap_rect.h
-                                        * (1.0 - rough_factor);
-                                }
+                                move_x += (tr_my_bounds.center().x - tr_other_bounds.center().x)
+                                    * 0.0000005
+                                    * overlap_rect.w
+                                    * overlap_rect.h
+                                    * (1.0 - rough_factor);
+                                move_y += (tr_my_bounds.center().y - tr_other_bounds.center().y)
+                                    * 0.0000005
+                                    * overlap_rect.w
+                                    * overlap_rect.h
+                                    * (1.0 - rough_factor);
                             }
                         }
-
-                        let (this_x, this_y) =
-                            state.rando_data.room_positions.get_mut(&key).unwrap();
-                        *this_x = (*this_x + move_x.clamp(-100.0, 100.0)).clamp(-1000.0, 1000.0);
-                        *this_y = (*this_y + move_y.clamp(-100.0, 100.0)).clamp(-1000.0, 1000.0);
                     }
+
+                    let (this_x, this_y) = state.rando_data.room_positions.get_mut(&key).unwrap();
+                    *this_x = (*this_x + move_x.clamp(-100.0, 100.0)).clamp(-1000.0, 1000.0);
+                    *this_y = (*this_y + move_y.clamp(-100.0, 100.0)).clamp(-1000.0, 1000.0);
                 }
             }
         }
@@ -537,6 +528,7 @@ impl MainState {
         None
     }
 
+    #[allow(clippy::ptr_arg)]
     fn find_path(&self, src: &String, dst: &String) -> Option<Vec<String>> {
         if let GameState::Loaded(state) = &self.game_state {
             let mut dist_from_src: HashMap<String, f32> = HashMap::new();
@@ -578,7 +570,7 @@ impl MainState {
 
                 let dist_to_cur = *dist_from_src.get(&visiting).unwrap();
 
-                for (tr_key, tr) in &room.transitions {
+                for tr_key in room.transitions.keys() {
                     let cost = dist_to_cur + 1.0;
 
                     let transition = format!("{}[{tr_key}]", visiting);
@@ -664,7 +656,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             for _ in 0..depth {
                 for key in render_rooms.clone() {
                     if let Some(room) = self.map_data.rooms.get(&key) {
-                        for (k, _tr) in &room.transitions {
+                        for k in room.transitions.keys() {
                             let transition = format!("{}[{k}]", key);
                             if state.rando_data.visited_transitions.contains(&transition) {
                                 if let Some((to_room, _to_transition)) =
@@ -705,18 +697,17 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
                     let bounds = cur_room.calc_bounds();
 
-                    let (x, y) = state
+                    let (x, y) = *state
                         .rando_data
                         .room_positions
                         .entry(key.clone())
-                        .or_insert_with(|| (0.0, 0.0))
-                        .clone();
+                        .or_insert_with(|| (0.0, 0.0));
                     transform.translate(x, y);
 
                     cur_room.draw(
                         ctx,
                         transform.clone(),
-                        &key,
+                        key,
                         &state.rando_data,
                         &self.asset_cache,
                         state.hovered_room.as_ref().map(|k| k == key),
@@ -808,12 +799,11 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
                 transform.push();
 
-                let (x, y) = state
+                let (x, y) = *state
                     .rando_data
                     .room_positions
                     .entry(state.current_room.clone())
-                    .or_insert_with(|| (0.0, 0.0))
-                    .clone();
+                    .or_insert_with(|| (0.0, 0.0));
                 transform.translate(x, y);
 
                 transform.push();
@@ -940,7 +930,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     let src = state
                         .selected_room
                         .clone()
-                        .unwrap_or(state.current_room.clone());
+                        .unwrap_or_else(|| state.current_room.clone());
                     let dst = self.path_target.clone();
                     self.highlight_path = dst.and_then(|dst| self.find_path(&src, &dst));
 
@@ -965,6 +955,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         //     }
         // }
 
+        #[allow(clippy::collapsible_if)]
         if !self
             .egui_ctx
             .as_ref()
