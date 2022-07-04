@@ -7,11 +7,10 @@ use std::{sync::mpsc::{self, Receiver, SyncSender}, thread::JoinHandle, collecti
 use data::MapData;
 use ggez::{
     event::{self, MouseButton},
-    graphics::{self, Color, DrawParam, Drawable, TextLayout, Rect, ImageFormat},
+    graphics::{self, Color, DrawParam, Drawable, Rect},
     Context, GameResult, conf::{WindowSetup, WindowMode}, GameError, mint::Point2, input::mouse::CursorIcon,
 };
 use json::JsonValue;
-use nalgebra::ComplexField;
 use parity_ws::{Message, Sender};
 use util::{transform_stack::TransformStack, split::GetSplit, color_ext::ColorExt};
 
@@ -136,13 +135,12 @@ impl MainState {
                         let rgba8 = decoded.to_rgba8();
                         let (width, height) = (rgba8.width(), rgba8.height());
 
-                        let img = graphics::Image::from_pixels(
+                        let img = graphics::Image::from_rgba8(
                             ctx,
+                            width as u16,
+                            height as u16,
                             rgba8.as_ref(),
-                            ImageFormat::Rgba8Unorm,
-                            width,
-                            height,
-                        );
+                        )?;
 
                         self.asset_cache.insert(name, img);
                     },
@@ -345,7 +343,7 @@ impl MainState {
             let mut transform = TransformStack::new();
             
             transform.push();
-            transform.translate(ctx.gfx.window().inner_size().width as f32 / 2.0, ctx.gfx.window().inner_size().height as f32 / 2.0);
+            transform.translate(graphics::window(ctx).inner_size().width as f32 / 2.0, graphics::window(ctx).inner_size().height as f32 / 2.0);
             transform.translate(-state.camera.x, -state.camera.y);
 
             for (room_key, (x, y)) in &state.rando_data.room_positions {
@@ -452,14 +450,11 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(
-            ctx,
-            graphics::CanvasLoadOp::Clear([0.0, 0.0, 0.0, 1.0].into()),
-        );
+        graphics::clear(ctx, [0.0, 0.0, 0.0, 1.0].into());
 
-        canvas.draw(&self.circle, DrawParam::default().dest([self.pos_x, 380.0]));
+        graphics::draw(ctx, &self.circle, DrawParam::default().dest([self.pos_x, 380.0]))?;
 
-        let hovered_room = self.get_room_at_window_position(ctx, ctx.mouse.position()).cloned();
+        let hovered_room = self.get_room_at_window_position(ctx, ggez::input::mouse::position(ctx)).cloned();
 
         if let GameState::Loaded(state) = &mut self.game_state {
             state.hovered_room = hovered_room;
@@ -487,7 +482,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
 
             transform.push();
-            transform.translate(ctx.gfx.window().inner_size().width as f32 / 2.0, ctx.gfx.window().inner_size().height as f32 / 2.0);
+            transform.translate(graphics::window(ctx).inner_size().width as f32 / 2.0, graphics::window(ctx).inner_size().height as f32 / 2.0);
             transform.translate(-state.camera.x, -state.camera.y);
             // transform.scale(2.0, 2.0);
             // if let Some(cur_room) = self.map_data.rooms.get(&state.current_room) {
@@ -504,7 +499,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     let (x, y) = state.rando_data.room_positions.entry(key.clone()).or_insert_with(|| (0.0, 0.0)).clone();
                     transform.translate(x, y);
 
-                    cur_room.draw(ctx, &mut canvas, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref() == Some(key), state.selected_room.as_ref() == Some(key), &self.highlight_path)?;
+                    cur_room.draw(ctx, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref() == Some(key), state.selected_room.as_ref() == Some(key), &self.highlight_path)?;
 
                     for (k, tr) in &cur_room.transitions {
                         let transition = format!("{}[{k}]", key);
@@ -526,19 +521,23 @@ impl event::EventHandler<ggez::GameError> for MainState {
                                             let mut color = graphics::Color::BLUE;
                                             if let Some(path) = &self.highlight_path {
                                                 if let Some(i) = path.iter().position(|path_tr| path_tr == &transition || path_tr == &to_transition_id) {
-                                                    let thru = ((ctx.time.time_since_start().as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
+                                                    let thru = ((ggez::timer::time_since_start(ctx).as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
                                                     color = color.lerp(&Color::from_rgb(255, 100, 160), thru);
                                                 }
                                             }
 
-                                            graphics::Mesh::new_line(
-                                                ctx, 
-                                                &[
-                                                    [tr.x, bounds.h - tr.y],
-                                                    [-x + *x2 + to_transition.x, -y + *y2 + (next_bounds.h - to_transition.y)],
-                                                ], 
-                                                2.0,
-                                                color)?.draw(&mut canvas, (&transform).into());
+                                            let points = [
+                                                [tr.x, bounds.h - tr.y],
+                                                [-x + *x2 + to_transition.x, -y + *y2 + (next_bounds.h - to_transition.y)],
+                                            ];
+                                            // TODO: don't need this check in ggez 0.8
+                                            if (points[0][0] - points[1][0]).abs() > 0.1 && (points[0][1] - points[1][1]).abs() > 0.1 {
+                                                graphics::Mesh::new_line(
+                                                    ctx, 
+                                                    &points, 
+                                                    2.0,
+                                                    color)?.draw(ctx, (&transform).into())?;
+                                            }
 
                                         }
                                     }
@@ -568,7 +567,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     transform.scale(0.33, 0.33);
                     transform.translate(-(img.width() as f32) / 2.0, -(img.height() as f32) / 2.0);
 
-                    canvas.draw(img, &transform);
+                    graphics::draw(ctx, img, &transform)?;
 
                     transform.pop();
                 } else {
@@ -580,7 +579,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         2.0,
                         Color::WHITE,
                     )?;
-                    canvas.draw(&player, &transform);
+                    graphics::draw(ctx, &player, &transform)?;
                 }
 
                 transform.pop();
@@ -591,31 +590,31 @@ impl event::EventHandler<ggez::GameError> for MainState {
             transform.pop();
 
             graphics::Text::new(format!("Hovered: {:?}", state.hovered_room))
-                .draw(&mut canvas, DrawParam::default()
-                    .dest([8.0, 20.0]));
+                .draw(ctx, DrawParam::default()
+                    .dest([8.0, 20.0]))?;
 
             graphics::Text::new(format!("Path Target: {:?}", self.path_target))
-                .draw(&mut canvas, DrawParam::default()
-                    .dest([8.0, 40.0]));
+                .draw(ctx, DrawParam::default()
+                    .dest([8.0, 40.0]))?;
 
             ggez::input::mouse::set_cursor_type(ctx, if state.hovered_room.is_some() { CursorIcon::Hand } else { CursorIcon::Default });
 
             if let Some(path) = &self.highlight_path {
                 graphics::Text::new(format!("Path: {:?}", path))
-                    .draw(&mut canvas, DrawParam::default()
-                        .dest([8.0, 60.0]));
+                    .draw(ctx, DrawParam::default()
+                        .dest([8.0, 60.0]))?;
             }
         }
 
         //img.draw(&mut canvas, [100.0, 100.0].into());
 
-        graphics::Text::new(format!("{:.0} FPS", ctx.time.fps()))
-            .set_bounds([60.0, 20.0], TextLayout::SingleLine { h_align: graphics::TextAlign::End, v_align: graphics::TextAlign::Begin })
-            .draw(&mut canvas, DrawParam::default()
+        graphics::Text::new(format!("{:.0} FPS", ggez::timer::fps(ctx)))
+            .set_bounds([60.0, 20.0], graphics::Align::Right)
+            .draw(ctx, DrawParam::default()
                 .dest([
-                    ctx.gfx.window().inner_size().width as f32 - 60.0 - 2.0,
+                    graphics::window(ctx).inner_size().width as f32 - 60.0 - 2.0,
                     2.0
-                    ]));
+                    ]))?;
         
         let room = if let GameState::Loaded(state) = &mut self.game_state {
             &state.current_room
@@ -623,15 +622,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
             "Not Loaded"
         };
         graphics::Text::new(format!("Current: {room}"))
-            .draw(&mut canvas, DrawParam::default()
-                .dest([8.0, 2.0]));
+            .draw(ctx, DrawParam::default()
+                .dest([8.0, 2.0]))?;
         
-        canvas.finish(ctx)?;
+        graphics::present(ctx)?;
 
         Ok(())
     }
 
-    fn quit_event(&mut self, _ctx: &mut Context) -> Result<bool, ggez::GameError> {
+    fn quit_event(&mut self, _ctx: &mut Context) -> bool {
         if self.shutdown_thread.is_some() {
             println!("Closing connection...");
             self.shutdown.send(()).unwrap();
@@ -639,7 +638,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             self.listen_thread.take().unwrap().join().unwrap();
             println!("Done");
         }
-        Ok(false)
+        false
     }
 
     fn mouse_button_down_event(
@@ -648,7 +647,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         button: event::MouseButton,
         x: f32,
         y: f32,
-    ) -> Result<(), ggez::GameError> {
+    ) {
 
         self.click_start_x = x;
         self.click_start_y = y;
@@ -678,8 +677,6 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 // }
             }
         }
-
-        Ok(())
     }
 
     fn mouse_button_up_event(
@@ -688,7 +685,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         button: MouseButton,
         _x: f32,
         _y: f32,
-    ) -> Result<(), ggez::GameError> {
+    ) {
         // if button == MouseButton::Left && (self.click_start_x - x).abs() <= 2.0 && (self.click_start_y - y).abs() <= 2.0 {
         //     let hovered_room = self.get_room_at_window_position(ctx, [x, y]).cloned();
 
@@ -703,8 +700,6 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 state.dragging_room = false;
             }
         }
-
-        Ok(())
     }
 
     fn mouse_motion_event(
@@ -714,9 +709,9 @@ impl event::EventHandler<ggez::GameError> for MainState {
         _y: f32,
         dx: f32,
         dy: f32,
-    ) -> Result<(), ggez::GameError> {
+    ) {
         if let GameState::Loaded(state) = &mut self.game_state {
-            if ctx.mouse.button_pressed(MouseButton::Left) {
+            if ggez::input::mouse::button_pressed(ctx, MouseButton::Left) {
                 if let Some(sel_room) = &state.selected_room {
                     if let Some((x, y)) = state.rando_data.room_positions.get_mut(sel_room) {
                         *x += dx;
@@ -725,8 +720,6 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 }
             }
         }
-
-        Ok(())
     }
 }
 

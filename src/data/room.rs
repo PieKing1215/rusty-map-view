@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use ggez::{graphics::{Rect, self, DrawParam, StrokeOptions, Color, Drawable}, GameResult};
+use ggez::{graphics::{Rect, self, DrawParam, StrokeOptions, Color, Drawable, Font, PxScale}, GameResult};
 use json::JsonValue;
-use nalgebra::ComplexField;
 
 use crate::util::{transform_stack::TransformStack, color_ext::ColorExt};
 
@@ -64,7 +63,7 @@ impl Room {
         }
     }
 
-    pub fn draw(&mut self, ctx: &ggez::Context, canvas: &mut graphics::Canvas, mut transform: TransformStack, key: &String, rando_data: &RandoData, asset_cache: &HashMap<String, graphics::Image>, hovered: bool, selected: bool, highlight_path: &Option<Vec<String>>) -> GameResult {
+    pub fn draw(&mut self, ctx: &mut ggez::Context, mut transform: TransformStack, key: &String, rando_data: &RandoData, asset_cache: &HashMap<String, graphics::Image>, hovered: bool, selected: bool, highlight_path: &Option<Vec<String>>) -> GameResult {
         let bounds = self.calc_bounds();
 
         let rect = graphics::Mesh::new_circle(
@@ -76,7 +75,7 @@ impl Room {
             graphics::Color::from_rgba(255, 0, 0, 255)
         )?;
 
-        canvas.draw(&rect, &transform);
+        graphics::draw(ctx, &rect, &transform)?;
 
 
         transform.translate(0.0, bounds.h);
@@ -104,7 +103,7 @@ impl Room {
         };
 
         let alpha = if selected {
-            ((ctx.time.time_since_start().as_secs_f32() / 0.33).sin().abs()) * 0.2 + 0.8
+            ((ggez::timer::time_since_start(ctx).as_secs_f32() / 0.33).sin().abs()) * 0.2 + 0.8
         } else if hovered {
             0.95
         } else {
@@ -114,7 +113,7 @@ impl Room {
         let mut path_highlight_factor = 0.0;
         if let Some(path) = highlight_path {
             if let Some(i) = path.iter().position(|path_tr| &Transition::get_transition_info(path_tr).unwrap().0 == key) {
-                let thru = ((ctx.time.time_since_start().as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
+                let thru = ((ggez::timer::time_since_start(ctx).as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
                 path_highlight_factor = thru;
             }
         }
@@ -127,7 +126,7 @@ impl Room {
             graphics::Color::from_rgb_u32(fill_color).lerp(&graphics::Color::from_rgba(0, 0, 0, 0), 1.0 - alpha)
         )?;
 
-        canvas.draw(&rect, &transform);
+        graphics::draw(ctx, &rect, &transform)?;
 
         let rect = graphics::Mesh::new_rounded_rectangle(
             ctx, 
@@ -137,7 +136,7 @@ impl Room {
             graphics::Color::from_rgb_u32(stroke_color).lerp(&Color::from_rgb(255, 100, 160), path_highlight_factor).lerp(&graphics::Color::from_rgba(0, 0, 0, 0), 1.0 - alpha)
         )?;
 
-        canvas.draw(&rect, &transform);
+        graphics::draw(ctx, &rect, &transform)?;
 
         let rect = graphics::Mesh::new_circle(
             ctx, 
@@ -148,7 +147,7 @@ impl Room {
             graphics::Color::from_rgba(0, 0, 255, 255)
         )?;
 
-        canvas.draw(&rect, &transform);
+        graphics::draw(ctx, &rect, &transform)?;
         
         
         let rect = graphics::Mesh::new_circle(
@@ -197,20 +196,20 @@ impl Room {
             let mut color = if revealed {
                 Color::from_rgba(150, 160, 150, 127)
             } else { 
-                Color::from_rgba(255, 255, 127, 191).lerp(&Color::WHITE, ((ctx.time.time_since_start().as_secs_f32()) / 0.5).sin().abs())
+                Color::from_rgba(255, 255, 127, 191).lerp(&Color::WHITE, ((ggez::timer::time_since_start(ctx).as_secs_f32()) / 0.5).sin().abs())
             };
 
             if let Some(path) = highlight_path {
                 if let Some(i) = path.iter().position(|path_tr| path_tr == &transition_id) {
-                    let thru = ((ctx.time.time_since_start().as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
+                    let thru = ((ggez::timer::time_since_start(ctx).as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
                     color = color.lerp(&Color::from_rgb(255, 100, 160), thru);
                 }
             }
 
             if n.starts_with("door") || n.starts_with("room") {
                 let param: DrawParam = Into::<DrawParam>::into(&transform).color(color);
-                canvas.draw(&transition_door, param);
-                // canvas.draw(&rect, &transform);
+                graphics::draw(ctx, &transition_door, param)?;
+                // graphics::draw(ctx, &rect, &transform);
             } else {
                 if n.starts_with("left") {
                     transform.rotate(-90.0_f32.to_radians());
@@ -220,8 +219,8 @@ impl Room {
                     transform.rotate(180.0_f32.to_radians());
                 }
                 let param: DrawParam = Into::<DrawParam>::into(&transform).color(color);
-                canvas.draw(&transition_normal, param);
-                // canvas.draw(&rect, &transform);
+                graphics::draw(ctx, &transition_normal, param)?;
+                // graphics::draw(ctx, &rect, &transform);
             }
             
             transform.pop();
@@ -241,7 +240,7 @@ impl Room {
             transform.push();
             transform.translate(i.x, -i.y);
 
-            canvas.draw(&item, &transform);
+            graphics::draw(ctx, &item, &transform)?;
 
             transform.pop();
         }
@@ -262,7 +261,7 @@ impl Room {
                 transform.scale(0.33, 0.33);
                 transform.translate(-(img.width() as f32) / 2.0, -(img.height() as f32) / 2.0);
     
-                canvas.draw(img, &transform);
+                graphics::draw(ctx, img, &transform)?;
     
                 transform.pop();
             }
@@ -277,8 +276,8 @@ impl Room {
                 transform.push();
                 transform.translate(*x, -*y);
     
-                canvas.draw(&bench, &transform);
-                // canvas.draw(&rect, &transform);
+                graphics::draw(ctx, &bench, &transform)?;
+                // graphics::draw(ctx, &rect, &transform);
     
                 transform.pop();
             }
@@ -289,7 +288,7 @@ impl Room {
         transform.push();
         transform.translate(bounds.x, bounds.y + bounds.h);
         // TODO: cache
-        graphics::Text::new(key).set_scale(12.0).draw(canvas, (&transform).into());
+        graphics::Text::new(key.clone()).set_font(Font::default(), PxScale::from(12.0)).draw(ctx, (&transform).into())?;
         transform.pop();
 
         Ok(())
