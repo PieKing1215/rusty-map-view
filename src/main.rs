@@ -537,7 +537,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
                                             let to_transition_id = format!("{}[{to_transition_key}]", to_room);
 
-                                            let mut color = graphics::Color::BLUE;
+                                            let mut color = graphics::Color::from_rgba(64, 64, 192, 127);
                                             if let Some(path) = &self.highlight_path {
                                                 if let Some(i) = path.iter().position(|path_tr| path_tr == &transition || path_tr == &to_transition_id) {
                                                     let thru = ((ggez::timer::time_since_start(ctx).as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
