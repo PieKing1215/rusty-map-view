@@ -721,6 +721,17 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
         }
     }
+
+    // TODO: not needed in ggez 0.8
+    fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) {
+        let rect = graphics::Rect::new(
+            0.0,
+            0.0,
+            width as f32,
+            height as f32,
+        );
+        graphics::set_screen_coordinates(ctx, rect).unwrap();
+    }
 }
 
 pub fn main() -> GameResult {
