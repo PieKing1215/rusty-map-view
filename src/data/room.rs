@@ -63,7 +63,7 @@ impl Room {
         }
     }
 
-    pub fn draw(&mut self, ctx: &mut ggez::Context, mut transform: TransformStack, key: &String, rando_data: &RandoData, asset_cache: &HashMap<String, graphics::Image>, hovered: bool, selected: bool, highlight_path: &Option<Vec<String>>, settings: &Settings) -> GameResult {
+    pub fn draw(&mut self, ctx: &mut ggez::Context, mut transform: TransformStack, key: &String, rando_data: &RandoData, asset_cache: &HashMap<String, graphics::Image>, hovered: Option<bool>, selected: Option<bool>, highlight_path: &Option<Vec<String>>, settings: &Settings) -> GameResult {
         let bounds = self.calc_bounds();
 
         if settings.debug_show_room_origins {
@@ -104,12 +104,16 @@ impl Room {
             _ => (0xA2A2A2, 0x2B2B2B),
         };
 
-        let alpha = if selected {
+        let mut alpha = if let Some(true) = selected {
             ((ggez::timer::time_since_start(ctx).as_secs_f32() / 0.33).sin().abs()) * 0.2 + 0.8
-        } else if hovered {
+        } else if let Some(true) = hovered {
             0.95
+        } else if let Some(false) = selected {
+            0.6
+        } else if let Some(false) = hovered {
+            0.7
         } else {
-            0.75
+            0.8
         };
 
         let mut path_highlight_factor = 0.0;
@@ -117,6 +121,9 @@ impl Room {
             if let Some(i) = path.iter().position(|path_tr| &Transition::get_transition_info(path_tr).unwrap().0 == key) {
                 let thru = ((ggez::timer::time_since_start(ctx).as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
                 path_highlight_factor = thru;
+                alpha = alpha.max(0.8);
+            } else {
+                alpha = alpha.min(0.5);
             }
         }
 

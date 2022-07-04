@@ -518,7 +518,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     let (x, y) = state.rando_data.room_positions.entry(key.clone()).or_insert_with(|| (0.0, 0.0)).clone();
                     transform.translate(x, y);
 
-                    cur_room.draw(ctx, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref() == Some(key), state.selected_room.as_ref() == Some(key), &self.highlight_path, &self.settings)?;
+                    cur_room.draw(ctx, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref().map(|k| k == key), state.selected_room.as_ref().map(|k| k == key), &self.highlight_path, &self.settings)?;
 
                     for (k, tr) in &cur_room.transitions {
                         let transition = format!("{}[{k}]", key);
@@ -550,7 +550,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                                                 [-x + *x2 + to_transition.x, -y + *y2 + (next_bounds.h - to_transition.y)],
                                             ];
                                             // TODO: don't need this check in ggez 0.8
-                                            if (points[0][0] - points[1][0]).abs() > 0.1 && (points[0][1] - points[1][1]).abs() > 0.1 {
+                                            if (points[0][0] - points[1][0]).abs() > 0.1 || (points[0][1] - points[1][1]).abs() > 0.1 {
                                                 graphics::Mesh::new_line(
                                                     ctx, 
                                                     &points, 
