@@ -1,23 +1,35 @@
 pub mod data;
+pub mod settings;
 pub mod state;
 pub mod util;
-pub mod settings;
 
-use std::{sync::mpsc::{self, Receiver, SyncSender}, thread::JoinHandle, collections::{HashMap, HashSet, BTreeSet}, time::Instant};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    sync::mpsc::{self, Receiver, SyncSender},
+    thread::JoinHandle,
+    time::Instant,
+};
 
 use data::MapData;
 use ggez::{
+    conf::{WindowMode, WindowSetup},
     event::{self, MouseButton},
     graphics::{self, Color, DrawParam, Drawable, Rect},
-    Context, GameResult, conf::{WindowSetup, WindowMode}, GameError, mint::Point2, input::mouse::CursorIcon,
+    input::mouse::CursorIcon,
+    mint::Point2,
+    Context, GameError, GameResult,
 };
 use ggez_egui::EguiBackend;
 use json::JsonValue;
 use parity_ws::{Message, Sender};
 use settings::Settings;
-use util::{transform_stack::TransformStack, split::GetSplit, color_ext::ColorExt};
+use util::{color_ext::ColorExt, split::GetSplit, transform_stack::TransformStack};
 
-use crate::{state::{GameState, LoadedState, Camera, CameraTarget}, data::{RandoData, transition::Transition}, util::rect_ext::RectExt};
+use crate::{
+    data::{transition::Transition, RandoData},
+    state::{Camera, CameraTarget, GameState, LoadedState},
+    util::rect_ext::RectExt,
+};
 
 struct MainState {
     pos_x: f32,
@@ -51,7 +63,8 @@ impl MainState {
         )?;
 
         println!("Loading map data...");
-        let map_data = data::load_mapdata(include_str!("../res/mapdata.json")).map_err(|s| GameError::CustomError(s))?;
+        let map_data = data::load_mapdata(include_str!("../res/mapdata.json"))
+            .map_err(|s| GameError::CustomError(s))?;
 
         let (send, recv) = mpsc::sync_channel(10);
         let (send_shutdown, recv_shutdown) = mpsc::sync_channel(1);
@@ -64,8 +77,7 @@ impl MainState {
         });
 
         let listen_thread = std::thread::spawn(move || {
-    
-            if let Err(error) = parity_ws::connect("ws://localhost:7900/ws", |out| {    
+            if let Err(error) = parity_ws::connect("ws://localhost:7900/ws", |out| {
                 send_out.send(out).unwrap();
 
                 |msg: Message| {
@@ -78,7 +90,7 @@ impl MainState {
                             Err(err) => eprintln!("json::parse: {err}"),
                         }
                     }
-    
+
                     Ok(())
                 }
             }) {
@@ -87,7 +99,25 @@ impl MainState {
         });
 
         let mut egui_backend = EguiBackend::default();
-        Ok(MainState { pos_x: 0.0, circle, recv, shutdown: send_shutdown, listen_thread: Some(listen_thread), shutdown_thread: Some(shutdown_thread), game_state: GameState::Unloaded, map_data, last_transition_time: Instant::now(), asset_cache: HashMap::new(), click_start_x: 0.0, click_start_y: 0.0, path_target: None, highlight_path: None, settings: Settings::default(), egui_ctx: None, egui_backend })
+        Ok(MainState {
+            pos_x: 0.0,
+            circle,
+            recv,
+            shutdown: send_shutdown,
+            listen_thread: Some(listen_thread),
+            shutdown_thread: Some(shutdown_thread),
+            game_state: GameState::Unloaded,
+            map_data,
+            last_transition_time: Instant::now(),
+            asset_cache: HashMap::new(),
+            click_start_x: 0.0,
+            click_start_y: 0.0,
+            path_target: None,
+            highlight_path: None,
+            settings: Settings::default(),
+            egui_ctx: None,
+            egui_backend,
+        })
     }
 
     fn on_message(&mut self, json: JsonValue, ctx: &mut Context) -> GameResult {
@@ -98,25 +128,42 @@ impl MainState {
             },
             Some("unloadSave") => {
                 self.game_state = GameState::Unloaded;
-            }
+            },
             Some("playerMove") => {
                 if let GameState::Loaded(state) = &mut self.game_state {
-                    state.current_room = json["newRoom"].as_str().expect(format!("Missing/Invalid field 'newRoom': {}", json["newRoom"]).as_str()).into();
+                    state.current_room = json["newRoom"]
+                        .as_str()
+                        .expect(
+                            format!("Missing/Invalid field 'newRoom': {}", json["newRoom"])
+                                .as_str(),
+                        )
+                        .into();
                     println!("Changed room: {}", state.current_room);
-                    state.player_x = json["x"].as_f32().expect(format!("Missing/Invalid field 'x': {}", json["x"]).as_str());
-                    state.player_y = json["y"].as_f32().expect(format!("Missing/Invalid field 'y': {}", json["y"]).as_str());
+                    state.player_x = json["x"]
+                        .as_f32()
+                        .expect(format!("Missing/Invalid field 'x': {}", json["x"]).as_str());
+                    state.player_y = json["y"]
+                        .as_f32()
+                        .expect(format!("Missing/Invalid field 'y': {}", json["y"]).as_str());
                     state.rando_data.room_positions.clear();
                     self.last_transition_time = Instant::now();
                 }
             },
             Some("playerPos") => {
                 if let GameState::Loaded(state) = &mut self.game_state {
-                    state.player_x = json["x"].as_f32().expect(format!("Missing/Invalid field 'x': {}", json["x"]).as_str());
-                    state.player_y = json["y"].as_f32().expect(format!("Missing/Invalid field 'y': {}", json["y"]).as_str());
+                    state.player_x = json["x"]
+                        .as_f32()
+                        .expect(format!("Missing/Invalid field 'x': {}", json["x"]).as_str());
+                    state.player_y = json["y"]
+                        .as_f32()
+                        .expect(format!("Missing/Invalid field 'y': {}", json["y"]).as_str());
                 }
             },
             Some("revealTransition") => {
-                let to: String = json["to"].as_str().expect(format!("Missing/Invalid field 'to': {}", json["to"]).as_str()).into();
+                let to: String = json["to"]
+                    .as_str()
+                    .expect(format!("Missing/Invalid field 'to': {}", json["to"]).as_str())
+                    .into();
                 if let GameState::Loaded(state) = &mut self.game_state {
                     state.rando_data.visited_transitions.insert(to.clone());
                     if let Some(from) = state.rando_data.transition_map.get(&to) {
@@ -125,20 +172,34 @@ impl MainState {
                     }
                 }
                 println!("Reveal transition: {}", to);
-            }
+            },
             Some("getItem") => {
-                let item: String = json["item"].as_str().expect(format!("Missing/Invalid field 'item': {}", json["item"]).as_str()).into();
-                let location: String = json["location"].as_str().expect(format!("Missing/Invalid field 'location': {}", json["location"]).as_str()).into();
+                let item: String = json["item"]
+                    .as_str()
+                    .expect(format!("Missing/Invalid field 'item': {}", json["item"]).as_str())
+                    .into();
+                let location: String = json["location"]
+                    .as_str()
+                    .expect(
+                        format!("Missing/Invalid field 'location': {}", json["location"]).as_str(),
+                    )
+                    .into();
                 println!("Got item: {} @ {}", item, location);
-            }
+            },
             Some("asset") => {
-                let name: String = json["name"].as_str().expect(format!("Missing/Invalid field 'name': {}", json["name"]).as_str()).into();
-                let data: String = json["data"].as_str().expect(format!("Missing/Invalid field 'data': {}", json["data"]).as_str()).into();
+                let name: String = json["name"]
+                    .as_str()
+                    .expect(format!("Missing/Invalid field 'name': {}", json["name"]).as_str())
+                    .into();
+                let data: String = json["data"]
+                    .as_str()
+                    .expect(format!("Missing/Invalid field 'data': {}", json["data"]).as_str())
+                    .into();
                 match base64::decode(data) {
                     Ok(data) => {
-
-                        let decoded = image::load_from_memory(&data)
-                            .map_err(|_| GameError::ResourceLoadError("image::load_from_memory failed".into()))?;
+                        let decoded = image::load_from_memory(&data).map_err(|_| {
+                            GameError::ResourceLoadError("image::load_from_memory failed".into())
+                        })?;
                         let rgba8 = decoded.to_rgba8();
                         let (width, height) = (rgba8.width(), rgba8.height());
 
@@ -155,7 +216,7 @@ impl MainState {
                         println!("{e:?}");
                     },
                 }
-            }
+            },
             Some(s) => println!("Unimplemented message type: {s}"),
             _ => println!("Message missing type!"),
         }
@@ -164,13 +225,25 @@ impl MainState {
     }
 
     fn load_save(&mut self, data: &JsonValue) -> Result<(), String> {
-
-        let hk_ver: String = data["playerData"]["version"].as_str().expect(format!("Missing/Invalid field 'playerData.version': {}", data["version"]).as_str()).into();
+        let hk_ver: String = data["playerData"]["version"]
+            .as_str()
+            .expect(
+                format!(
+                    "Missing/Invalid field 'playerData.version': {}",
+                    data["version"]
+                )
+                .as_str(),
+            )
+            .into();
         println!("hk_ver = {hk_ver}");
 
-        let rando_data = data["PolymorphicModData"]["RandomizerMod"].as_str().ok_or("Missing data.PolymorphicModData.RandomizerMod".into())
+        let rando_data = data["PolymorphicModData"]["RandomizerMod"]
+            .as_str()
+            .ok_or("Missing data.PolymorphicModData.RandomizerMod".into())
             .and_then(|raw_json| json::parse(raw_json).map_err(|json_err| json_err.to_string()))?;
-        let rando_ctx = data["PolymorphicModData"]["context"].as_str().ok_or("Missing data.PolymorphicModData.context".into())
+        let rando_ctx = data["PolymorphicModData"]["context"]
+            .as_str()
+            .ok_or("Missing data.PolymorphicModData.context".into())
             .and_then(|raw_json| json::parse(raw_json).map_err(|json_err| json_err.to_string()))?;
 
         let mut transition_map = HashMap::new();
@@ -191,14 +264,23 @@ impl MainState {
             transition_map.insert(src, dst);
         }
 
-        let mut visited_transitions  = HashSet::new();
+        let mut visited_transitions = HashSet::new();
         for (src, dst) in rando_data["TrackerData"]["visitedTransitions"].entries() {
             visited_transitions.insert(src.into());
             visited_transitions.insert(dst.as_str().unwrap().into());
         }
 
         self.game_state = GameState::Loaded(LoadedState {
-            current_room: rando_ctx["StartDef"]["SceneName"].as_str().expect(format!("Missing/Invalid field 'rando_ctx.StartDef.SceneName': {}", rando_ctx["StartDef"]["SceneName"]).as_str()).into(),
+            current_room: rando_ctx["StartDef"]["SceneName"]
+                .as_str()
+                .expect(
+                    format!(
+                        "Missing/Invalid field 'rando_ctx.StartDef.SceneName': {}",
+                        rando_ctx["StartDef"]["SceneName"]
+                    )
+                    .as_str(),
+                )
+                .into(),
             player_x: 0.0,
             player_y: 0.0,
             rando_data: RandoData {
@@ -217,7 +299,14 @@ impl MainState {
 
     fn update_room_positions(&mut self) {
         if let GameState::Loaded(state) = &mut self.game_state {
-            let rough_factor = 1.0 - (Instant::now().saturating_duration_since(self.last_transition_time).as_secs_f32() / 1.0 - 0.5).powi(2).clamp(0.0, 1.0);
+            let rough_factor = 1.0
+                - (Instant::now()
+                    .saturating_duration_since(self.last_transition_time)
+                    .as_secs_f32()
+                    / 1.0
+                    - 0.5)
+                    .powi(2)
+                    .clamp(0.0, 1.0);
             // let rough_factor = 1.0;
 
             let v: Vec<_> = state.rando_data.room_positions.keys().cloned().collect();
@@ -229,10 +318,13 @@ impl MainState {
                 } else if state.selected_room.as_ref() == Some(&key) && state.dragging_room {
                     // don't move
                 } else {
-                    if let Some((cur_room, other_rooms)) = self.map_data.rooms.split(&key).as_deref() {
+                    if let Some((cur_room, other_rooms)) =
+                        self.map_data.rooms.split(&key).as_deref()
+                    {
                         let bounds = cur_room.calc_bounds();
 
-                        let (this_x, this_y) = state.rando_data.room_positions.get(&key).unwrap().clone();
+                        let (this_x, this_y) =
+                            state.rando_data.room_positions.get(&key).unwrap().clone();
 
                         let mut move_x = 0.0;
                         let mut move_y = 0.0;
@@ -242,37 +334,72 @@ impl MainState {
                         for (k, tr) in &cur_room.transitions {
                             let transition = format!("{}[{k}]", key);
                             if state.rando_data.visited_transitions.contains(&transition) {
-                                if let Some((to_room, to_transition_k)) = Transition::get_transition_info(state.rando_data.transition_map.get(&transition).unwrap_or(&transition)) {
+                                if let Some((to_room, to_transition_k)) =
+                                    Transition::get_transition_info(
+                                        state
+                                            .rando_data
+                                            .transition_map
+                                            .get(&transition)
+                                            .unwrap_or(&transition),
+                                    )
+                                {
                                     if state.rando_data.room_positions.contains_key(&to_room) {
                                         if let Some(next_room) = other_rooms.get(&to_room) {
                                             let next_bounds = next_room.calc_bounds();
 
-                                            if let Some(to_transition) = next_room.transitions.get(&to_transition_k) {
-                                                let (other_x, other_y) = state.rando_data.room_positions.get(&to_room).unwrap().clone();
+                                            if let Some(to_transition) =
+                                                next_room.transitions.get(&to_transition_k)
+                                            {
+                                                let (other_x, other_y) = state
+                                                    .rando_data
+                                                    .room_positions
+                                                    .get(&to_room)
+                                                    .unwrap()
+                                                    .clone();
 
                                                 // move so src lines up with dst
                                                 let strength = 0.005 + 0.4 * rough_factor;
                                                 let mut strength_x = 1.0;
                                                 let mut strength_y = 1.0;
 
-                                                let dx = (-tr.x + to_transition.x) - this_x + other_x;
-                                                let dy = (-(bounds.h - tr.y) + (next_bounds.h - to_transition.y)) - this_y + other_y;
+                                                let dx =
+                                                    (-tr.x + to_transition.x) - this_x + other_x;
+                                                let dy = (-(bounds.h - tr.y)
+                                                    + (next_bounds.h - to_transition.y))
+                                                    - this_y
+                                                    + other_y;
 
-                                                if (k.starts_with("right") && to_transition_k.starts_with("left")) || (k.starts_with("left") && to_transition_k.starts_with("right")) {
-                                                    strength_x = ((dx.abs() - 200.0) / 200.0).clamp(0.0, 0.5);
-                                                    if (k.starts_with("right") && dx < 0.0) || (k.starts_with("left") && dx > 0.0) {
+                                                if (k.starts_with("right")
+                                                    && to_transition_k.starts_with("left"))
+                                                    || (k.starts_with("left")
+                                                        && to_transition_k.starts_with("right"))
+                                                {
+                                                    strength_x = ((dx.abs() - 200.0) / 200.0)
+                                                        .clamp(0.0, 0.5);
+                                                    if (k.starts_with("right") && dx < 0.0)
+                                                        || (k.starts_with("left") && dx > 0.0)
+                                                    {
                                                         strength_x = 2.0;
                                                     }
                                                     strength_y = 2.0;
-                                                } else if (k.starts_with("top") && to_transition_k.starts_with("bot")) || (k.starts_with("bot") && to_transition_k.starts_with("top")) {
+                                                } else if (k.starts_with("top")
+                                                    && to_transition_k.starts_with("bot"))
+                                                    || (k.starts_with("bot")
+                                                        && to_transition_k.starts_with("top"))
+                                                {
                                                     strength_x = 2.0;
-                                                    strength_y = ((dy.abs() - 200.0) / 200.0).clamp(0.0, 0.5);
-                                                    if (k.starts_with("top") && dy > 0.0) || (k.starts_with("bot") && dy < 0.0) {
+                                                    strength_y = ((dy.abs() - 200.0) / 200.0)
+                                                        .clamp(0.0, 0.5);
+                                                    if (k.starts_with("top") && dy > 0.0)
+                                                        || (k.starts_with("bot") && dy < 0.0)
+                                                    {
                                                         strength_y = 2.0;
                                                     }
                                                 } else {
-                                                    strength_x = ((dx.abs() - 400.0) / 400.0).clamp(0.0, 0.5);
-                                                    strength_y = ((dy.abs() - 400.0) / 400.0).clamp(0.0, 0.5);
+                                                    strength_x = ((dx.abs() - 400.0) / 400.0)
+                                                        .clamp(0.0, 0.5);
+                                                    strength_y = ((dy.abs() - 400.0) / 400.0)
+                                                        .clamp(0.0, 0.5);
                                                 }
 
                                                 move_x += dx * strength * strength_x;
@@ -285,12 +412,17 @@ impl MainState {
                                 }
                             }
                         }
-                        
+
                         // remove intersections
                         for (other_key, other_room) in other_rooms.iter() {
                             if state.rando_data.room_positions.contains_key(other_key) {
                                 let other_bounds = other_room.calc_bounds();
-                                let (other_x, other_y) = state.rando_data.room_positions.get(other_key).unwrap().clone();
+                                let (other_x, other_y) = state
+                                    .rando_data
+                                    .room_positions
+                                    .get(other_key)
+                                    .unwrap()
+                                    .clone();
 
                                 let mut tr_my_bounds = bounds.clone();
                                 tr_my_bounds.translate([this_x, this_y + bounds.h]);
@@ -307,8 +439,16 @@ impl MainState {
                                     let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
                                     let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
 
-                                    move_x += (tr_my_bounds.center().x - overlap_rect.center().x) * 0.00005 * overlap_rect.w * overlap_rect.h * (1.0 - rough_factor);
-                                    move_y += (tr_my_bounds.center().y - overlap_rect.center().y) * 0.00005 * overlap_rect.w * overlap_rect.h * (1.0 - rough_factor);
+                                    move_x += (tr_my_bounds.center().x - overlap_rect.center().x)
+                                        * 0.00005
+                                        * overlap_rect.w
+                                        * overlap_rect.h
+                                        * (1.0 - rough_factor);
+                                    move_y += (tr_my_bounds.center().y - overlap_rect.center().y)
+                                        * 0.00005
+                                        * overlap_rect.w
+                                        * overlap_rect.h
+                                        * (1.0 - rough_factor);
                                 }
 
                                 // wide area
@@ -328,13 +468,24 @@ impl MainState {
                                     let oy2 = tr_my_bounds.bottom().min(tr_other_bounds.bottom());
                                     let overlap_rect = Rect::new(ox1, oy1, ox2 - ox1, oy2 - oy1);
 
-                                    move_x += (tr_my_bounds.center().x - tr_other_bounds.center().x) * 0.0000005 * overlap_rect.w * overlap_rect.h * (1.0 - rough_factor);
-                                    move_y += (tr_my_bounds.center().y - tr_other_bounds.center().y) * 0.0000005 * overlap_rect.w * overlap_rect.h * (1.0 - rough_factor);
+                                    move_x += (tr_my_bounds.center().x
+                                        - tr_other_bounds.center().x)
+                                        * 0.0000005
+                                        * overlap_rect.w
+                                        * overlap_rect.h
+                                        * (1.0 - rough_factor);
+                                    move_y += (tr_my_bounds.center().y
+                                        - tr_other_bounds.center().y)
+                                        * 0.0000005
+                                        * overlap_rect.w
+                                        * overlap_rect.h
+                                        * (1.0 - rough_factor);
                                 }
                             }
                         }
 
-                        let (this_x, this_y) = state.rando_data.room_positions.get_mut(&key).unwrap();
+                        let (this_x, this_y) =
+                            state.rando_data.room_positions.get_mut(&key).unwrap();
                         *this_x = (*this_x + move_x.clamp(-100.0, 100.0)).clamp(-1000.0, 1000.0);
                         *this_y = (*this_y + move_y.clamp(-100.0, 100.0)).clamp(-1000.0, 1000.0);
                     }
@@ -343,14 +494,21 @@ impl MainState {
         }
     }
 
-    fn get_room_at_window_position(&self, ctx: &Context, pos: impl Into<Point2<f32>>) -> Option<&String> {
+    fn get_room_at_window_position(
+        &self,
+        ctx: &Context,
+        pos: impl Into<Point2<f32>>,
+    ) -> Option<&String> {
         let pos = pos.into();
 
         if let GameState::Loaded(state) = &self.game_state {
             let mut transform = TransformStack::new();
-            
+
             transform.push();
-            transform.translate(graphics::window(ctx).inner_size().width as f32 / 2.0, graphics::window(ctx).inner_size().height as f32 / 2.0);
+            transform.translate(
+                graphics::window(ctx).inner_size().width as f32 / 2.0,
+                graphics::window(ctx).inner_size().height as f32 / 2.0,
+            );
             transform.translate(-state.camera.x, -state.camera.y);
 
             for (room_key, (x, y)) in &state.rando_data.room_positions {
@@ -388,12 +546,22 @@ impl MainState {
 
             let mut unvisited: Vec<String> = self.map_data.rooms.keys().cloned().collect();
 
-            while let Some((idx, _)) = unvisited.iter().enumerate().filter(|(_, r)| dist_from_src.contains_key(*r)).min_by(|a, b| dist_from_src.get(a.1).unwrap().partial_cmp(dist_from_src.get(b.1).unwrap()).unwrap()) {
+            while let Some((idx, _)) = unvisited
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| dist_from_src.contains_key(*r))
+                .min_by(|a, b| {
+                    dist_from_src
+                        .get(a.1)
+                        .unwrap()
+                        .partial_cmp(dist_from_src.get(b.1).unwrap())
+                        .unwrap()
+                })
+            {
                 let visiting = unvisited.remove(idx);
                 // println!("visiting {visiting}");
 
                 if &visiting == dst {
-
                     let mut path = Vec::new();
                     let mut prev_room = visiting;
 
@@ -411,12 +579,17 @@ impl MainState {
                 let dist_to_cur = *dist_from_src.get(&visiting).unwrap();
 
                 for (tr_key, tr) in &room.transitions {
-
                     let cost = dist_to_cur + 1.0;
 
                     let transition = format!("{}[{tr_key}]", visiting);
                     if state.rando_data.visited_transitions.contains(&transition) {
-                        if let Some((to_room, _to_transition)) = Transition::get_transition_info(state.rando_data.transition_map.get(&transition).unwrap_or(&transition)) {
+                        if let Some((to_room, _to_transition)) = Transition::get_transition_info(
+                            state
+                                .rando_data
+                                .transition_map
+                                .get(&transition)
+                                .unwrap_or(&transition),
+                        ) {
                             if unvisited.contains(&to_room) {
                                 if let Some(v) = dist_from_src.get(&to_room).cloned() {
                                     if cost < v {
@@ -432,7 +605,6 @@ impl MainState {
                     }
                 }
             }
-
         }
 
         None
@@ -443,15 +615,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let egui_ctx = self.egui_backend.ctx();
         self.egui_ctx = Some((&*egui_ctx).clone());
-		egui::Window::new("Rusty Map View").show(&egui_ctx, |ui| {
-			if ui.button("quit").clicked() {
-				ggez::event::quit(ctx);
-			}
-		});
+        egui::Window::new("Rusty Map View").show(&egui_ctx, |ui| {
+            if ui.button("quit").clicked() {
+                ggez::event::quit(ctx);
+            }
+        });
 
-		egui::Window::new("All Settings").show(&egui_ctx, |ui| {
-			self.settings.fill_debug_egui(ui);
-		});
+        egui::Window::new("All Settings").show(&egui_ctx, |ui| {
+            self.settings.fill_debug_egui(ui);
+        });
 
         self.pos_x = self.pos_x % 800.0 + 1.0;
 
@@ -471,9 +643,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, [0.0, 0.0, 0.0, 1.0].into());
 
-        graphics::draw(ctx, &self.circle, DrawParam::default().dest([self.pos_x, 380.0]))?;
+        graphics::draw(
+            ctx,
+            &self.circle,
+            DrawParam::default().dest([self.pos_x, 380.0]),
+        )?;
 
-        let hovered_room = self.get_room_at_window_position(ctx, ggez::input::mouse::position(ctx)).cloned();
+        let hovered_room = self
+            .get_room_at_window_position(ctx, ggez::input::mouse::position(ctx))
+            .cloned();
 
         if let GameState::Loaded(state) = &mut self.game_state {
             state.hovered_room = hovered_room;
@@ -489,9 +667,17 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         for (k, _tr) in &room.transitions {
                             let transition = format!("{}[{k}]", key);
                             if state.rando_data.visited_transitions.contains(&transition) {
-                                if let Some((to_room, _to_transition)) = Transition::get_transition_info(state.rando_data.transition_map.get(&transition).unwrap_or(&transition)) {
+                                if let Some((to_room, _to_transition)) =
+                                    Transition::get_transition_info(
+                                        state
+                                            .rando_data
+                                            .transition_map
+                                            .get(&transition)
+                                            .unwrap_or(&transition),
+                                    )
+                                {
                                     // if to_room == "Fungus1_19" || to_room == "Mines_20" {
-                                        render_rooms.insert(to_room);
+                                    render_rooms.insert(to_room);
                                     // }
                                 }
                             }
@@ -501,7 +687,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
 
             transform.push();
-            transform.translate(graphics::window(ctx).inner_size().width as f32 / 2.0, graphics::window(ctx).inner_size().height as f32 / 2.0);
+            transform.translate(
+                graphics::window(ctx).inner_size().width as f32 / 2.0,
+                graphics::window(ctx).inner_size().height as f32 / 2.0,
+            );
             transform.translate(-state.camera.x, -state.camera.y);
             // transform.scale(2.0, 2.0);
             // if let Some(cur_room) = self.map_data.rooms.get(&state.current_room) {
@@ -510,54 +699,99 @@ impl event::EventHandler<ggez::GameError> for MainState {
             // }
 
             for key in &render_rooms {
-                if let Some((cur_room, other_rooms)) = self.map_data.rooms.split(key).as_deref_mut() {
+                if let Some((cur_room, other_rooms)) = self.map_data.rooms.split(key).as_deref_mut()
+                {
                     transform.push();
 
                     let bounds = cur_room.calc_bounds();
 
-                    let (x, y) = state.rando_data.room_positions.entry(key.clone()).or_insert_with(|| (0.0, 0.0)).clone();
+                    let (x, y) = state
+                        .rando_data
+                        .room_positions
+                        .entry(key.clone())
+                        .or_insert_with(|| (0.0, 0.0))
+                        .clone();
                     transform.translate(x, y);
 
-                    cur_room.draw(ctx, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref().map(|k| k == key), state.selected_room.as_ref().map(|k| k == key), &self.highlight_path, &self.settings)?;
+                    cur_room.draw(
+                        ctx,
+                        transform.clone(),
+                        &key,
+                        &state.rando_data,
+                        &self.asset_cache,
+                        state.hovered_room.as_ref().map(|k| k == key),
+                        state.selected_room.as_ref().map(|k| k == key),
+                        &self.highlight_path,
+                        &self.settings,
+                    )?;
 
                     for (k, tr) in &cur_room.transitions {
                         let transition = format!("{}[{k}]", key);
                         if state.rando_data.visited_transitions.contains(&transition) {
-                            if let Some((to_room, to_transition_key)) = Transition::get_transition_info(state.rando_data.transition_map.get(&transition).unwrap_or(&transition)) {
+                            if let Some((to_room, to_transition_key)) =
+                                Transition::get_transition_info(
+                                    state
+                                        .rando_data
+                                        .transition_map
+                                        .get(&transition)
+                                        .unwrap_or(&transition),
+                                )
+                            {
                                 if state.rando_data.room_positions.contains_key(&to_room) {
                                     if let Some(next_room) = other_rooms.get(&to_room) {
                                         let next_bounds = next_room.calc_bounds();
 
-                                        if let Some(to_transition) = next_room.transitions.get(&to_transition_key) {
+                                        if let Some(to_transition) =
+                                            next_room.transitions.get(&to_transition_key)
+                                        {
                                             // move so src lines up with dst
                                             // dx += ((-tr.x + to_transition.x) - this_x) * 0.0025;
                                             // dy += ((-(bounds.h - tr.y) + (next_bounds.h - to_transition.y)) - this_y) * 0.0025;
 
-                                            let (x2, y2) = state.rando_data.room_positions.get(&to_room).unwrap();
+                                            let (x2, y2) = state
+                                                .rando_data
+                                                .room_positions
+                                                .get(&to_room)
+                                                .unwrap();
 
-                                            let to_transition_id = format!("{}[{to_transition_key}]", to_room);
+                                            let to_transition_id =
+                                                format!("{}[{to_transition_key}]", to_room);
 
-                                            let mut color = graphics::Color::from_rgba(64, 64, 192, 127);
+                                            let mut color =
+                                                graphics::Color::from_rgba(64, 64, 192, 127);
                                             if let Some(path) = &self.highlight_path {
-                                                if let Some(i) = path.iter().position(|path_tr| path_tr == &transition || path_tr == &to_transition_id) {
-                                                    let thru = ((ggez::timer::time_since_start(ctx).as_secs_f32() + i as f32) / 0.25).sin().max(0.25);
-                                                    color = color.lerp(&Color::from_rgb(255, 100, 160), thru);
+                                                if let Some(i) = path.iter().position(|path_tr| {
+                                                    path_tr == &transition
+                                                        || path_tr == &to_transition_id
+                                                }) {
+                                                    let thru =
+                                                        ((ggez::timer::time_since_start(ctx)
+                                                            .as_secs_f32()
+                                                            + i as f32)
+                                                            / 0.25)
+                                                            .sin()
+                                                            .max(0.25);
+                                                    color = color.lerp(
+                                                        &Color::from_rgb(255, 100, 160),
+                                                        thru,
+                                                    );
                                                 }
                                             }
 
                                             let points = [
                                                 [tr.x, bounds.h - tr.y],
-                                                [-x + *x2 + to_transition.x, -y + *y2 + (next_bounds.h - to_transition.y)],
+                                                [
+                                                    -x + *x2 + to_transition.x,
+                                                    -y + *y2 + (next_bounds.h - to_transition.y),
+                                                ],
                                             ];
                                             // TODO: don't need this check in ggez 0.8
-                                            if (points[0][0] - points[1][0]).abs() > 0.1 || (points[0][1] - points[1][1]).abs() > 0.1 {
-                                                graphics::Mesh::new_line(
-                                                    ctx, 
-                                                    &points, 
-                                                    2.0,
-                                                    color)?.draw(ctx, (&transform).into())?;
+                                            if (points[0][0] - points[1][0]).abs() > 0.1
+                                                || (points[0][1] - points[1][1]).abs() > 0.1
+                                            {
+                                                graphics::Mesh::new_line(ctx, &points, 2.0, color)?
+                                                    .draw(ctx, (&transform).into())?;
                                             }
-
                                         }
                                     }
                                 }
@@ -574,10 +808,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
                 transform.push();
 
-                let (x, y) = state.rando_data.room_positions.entry(state.current_room.clone()).or_insert_with(|| (0.0, 0.0)).clone();
+                let (x, y) = state
+                    .rando_data
+                    .room_positions
+                    .entry(state.current_room.clone())
+                    .or_insert_with(|| (0.0, 0.0))
+                    .clone();
                 transform.translate(x, y);
 
-                
                 transform.push();
                 transform.translate(state.player_x, bounds.h - state.player_y);
 
@@ -609,19 +847,23 @@ impl event::EventHandler<ggez::GameError> for MainState {
             transform.pop();
 
             graphics::Text::new(format!("Hovered: {:?}", state.hovered_room))
-                .draw(ctx, DrawParam::default()
-                    .dest([8.0, 20.0]))?;
+                .draw(ctx, DrawParam::default().dest([8.0, 20.0]))?;
 
             graphics::Text::new(format!("Path Target: {:?}", self.path_target))
-                .draw(ctx, DrawParam::default()
-                    .dest([8.0, 40.0]))?;
+                .draw(ctx, DrawParam::default().dest([8.0, 40.0]))?;
 
-            ggez::input::mouse::set_cursor_type(ctx, if state.hovered_room.is_some() { CursorIcon::Hand } else { CursorIcon::Default });
+            ggez::input::mouse::set_cursor_type(
+                ctx,
+                if state.hovered_room.is_some() {
+                    CursorIcon::Hand
+                } else {
+                    CursorIcon::Default
+                },
+            );
 
             if let Some(path) = &self.highlight_path {
                 graphics::Text::new(format!("Path: {:?}", path))
-                    .draw(ctx, DrawParam::default()
-                        .dest([8.0, 60.0]))?;
+                    .draw(ctx, DrawParam::default().dest([8.0, 60.0]))?;
             }
         }
 
@@ -629,21 +871,22 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         graphics::Text::new(format!("{:.0} FPS", ggez::timer::fps(ctx)))
             .set_bounds([60.0, 20.0], graphics::Align::Right)
-            .draw(ctx, DrawParam::default()
-                .dest([
+            .draw(
+                ctx,
+                DrawParam::default().dest([
                     graphics::window(ctx).inner_size().width as f32 - 60.0 - 2.0,
-                    2.0
-                    ]))?;
-        
+                    2.0,
+                ]),
+            )?;
+
         let room = if let GameState::Loaded(state) = &mut self.game_state {
             &state.current_room
         } else {
             "Not Loaded"
         };
         graphics::Text::new(format!("Current: {room}"))
-            .draw(ctx, DrawParam::default()
-                .dest([8.0, 2.0]))?;
-        
+            .draw(ctx, DrawParam::default().dest([8.0, 2.0]))?;
+
         graphics::draw(ctx, &self.egui_backend, ([0.0, 0.0],))?;
 
         graphics::present(ctx)?;
@@ -671,7 +914,11 @@ impl event::EventHandler<ggez::GameError> for MainState {
     ) {
         self.egui_backend.input.mouse_button_down_event(button);
 
-        if !self.egui_ctx.as_ref().map_or(false, |ectx| ectx.wants_pointer_input()) {
+        if !self
+            .egui_ctx
+            .as_ref()
+            .map_or(false, |ectx| ectx.wants_pointer_input())
+        {
             self.click_start_x = x;
             self.click_start_y = y;
 
@@ -690,7 +937,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 if let GameState::Loaded(state) = &mut self.game_state {
                     state.hovered_room = hovered_room;
                     self.path_target = state.hovered_room.clone();
-                    let src = state.selected_room.clone().unwrap_or(state.current_room.clone());
+                    let src = state
+                        .selected_room
+                        .clone()
+                        .unwrap_or(state.current_room.clone());
                     let dst = self.path_target.clone();
                     self.highlight_path = dst.and_then(|dst| self.find_path(&src, &dst));
 
@@ -703,13 +953,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         }
     }
 
-    fn mouse_button_up_event(
-        &mut self,
-        _ctx: &mut Context,
-        button: MouseButton,
-        _x: f32,
-        _y: f32,
-    ) {
+    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
         self.egui_backend.input.mouse_button_up_event(button);
 
         // if button == MouseButton::Left && (self.click_start_x - x).abs() <= 2.0 && (self.click_start_y - y).abs() <= 2.0 {
@@ -721,7 +965,11 @@ impl event::EventHandler<ggez::GameError> for MainState {
         //     }
         // }
 
-        if !self.egui_ctx.as_ref().map_or(false, |ectx| ectx.wants_pointer_input()) {
+        if !self
+            .egui_ctx
+            .as_ref()
+            .map_or(false, |ectx| ectx.wants_pointer_input())
+        {
             if button == MouseButton::Left {
                 if let GameState::Loaded(state) = &mut self.game_state {
                     state.dragging_room = false;
@@ -730,17 +978,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
         }
     }
 
-    fn mouse_motion_event(
-        &mut self,
-        ctx: &mut Context,
-        x: f32,
-        y: f32,
-        dx: f32,
-        dy: f32,
-    ) {
+    fn mouse_motion_event(&mut self, ctx: &mut Context, x: f32, y: f32, dx: f32, dy: f32) {
         self.egui_backend.input.mouse_motion_event(x, y);
 
-        if !self.egui_ctx.as_ref().map_or(false, |ectx| ectx.wants_pointer_input()) {
+        if !self
+            .egui_ctx
+            .as_ref()
+            .map_or(false, |ectx| ectx.wants_pointer_input())
+        {
             if let GameState::Loaded(state) = &mut self.game_state {
                 if ggez::input::mouse::button_pressed(ctx, MouseButton::Left) {
                     if let Some(sel_room) = &state.selected_room {
@@ -756,19 +1001,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
     // TODO: not needed in ggez 0.8
     fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) {
-        let rect = graphics::Rect::new(
-            0.0,
-            0.0,
-            width as f32,
-            height as f32,
-        );
+        let rect = graphics::Rect::new(0.0, 0.0, width as f32, height as f32);
         graphics::set_screen_coordinates(ctx, rect).unwrap();
     }
 }
 
 pub fn main() -> GameResult {
     let cb = ggez::ContextBuilder::new("rusty-map-view", "PieKing1215")
-        .window_setup(WindowSetup::default().title("rusty-map-view").vsync(false)).window_mode(WindowMode::default().resizable(true));
+        .window_setup(WindowSetup::default().title("rusty-map-view").vsync(false))
+        .window_mode(WindowMode::default().resizable(true));
     let (mut ctx, event_loop) = cb.build()?;
     let state = MainState::new(&mut ctx)?;
     event::run(ctx, event_loop, state)

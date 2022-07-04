@@ -1,6 +1,5 @@
 use ggez::graphics::Rect;
 
-
 pub trait RectExt {
     fn inflate(&mut self, amount: f32);
 }

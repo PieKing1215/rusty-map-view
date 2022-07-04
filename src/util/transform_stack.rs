@@ -1,6 +1,5 @@
 use ggez::graphics::DrawParam;
-use nalgebra::{Matrix4, Vector3, Point3};
-
+use nalgebra::{Matrix4, Point3, Vector3};
 
 #[derive(Clone)]
 pub struct TransformStack {

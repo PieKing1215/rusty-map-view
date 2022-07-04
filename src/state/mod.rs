@@ -1,9 +1,8 @@
-use crate::data::{RandoData, MapData};
-
+use crate::data::{MapData, RandoData};
 
 pub enum GameState {
     Unloaded,
-    Loaded(LoadedState)
+    Loaded(LoadedState),
 }
 
 pub struct LoadedState {
@@ -19,7 +18,13 @@ pub struct LoadedState {
 
 impl LoadedState {
     pub fn update(&mut self, map_data: &MapData) {
-        self.camera.update(map_data, &self.rando_data, self.player_x, self.player_y, &self.current_room);
+        self.camera.update(
+            map_data,
+            &self.rando_data,
+            self.player_x,
+            self.player_y,
+            &self.current_room,
+        );
     }
 }
 
@@ -30,17 +35,21 @@ pub struct Camera {
 }
 
 pub enum CameraTarget {
-    Point {
-        x: f32,
-        y: f32,
-    },
+    Point { x: f32, y: f32 },
     Room(String),
     Player,
     PlayerRoom,
 }
 
 impl Camera {
-    pub fn update(&mut self, map_data: &MapData, rando_data: &RandoData, player_x: f32, player_y: f32, current_room: &String) {
+    pub fn update(
+        &mut self,
+        map_data: &MapData,
+        rando_data: &RandoData,
+        player_x: f32,
+        player_y: f32,
+        current_room: &String,
+    ) {
         let (tx, ty) = match &self.target {
             CameraTarget::Point { x, y } => (*x, *y),
             CameraTarget::Room(r) => {
@@ -74,6 +83,5 @@ impl Camera {
 
         self.x += (tx - self.x) * 0.125;
         self.y += (ty - self.y) * 0.125;
-
     }
 }

@@ -1,6 +1,5 @@
 use json::JsonValue;
 
-
 pub struct Item {
     pub x: f32,
     pub y: f32,

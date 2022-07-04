@@ -1,6 +1,5 @@
 use egui::Ui;
 
-
 pub struct Settings {
     pub depth: u8,
     pub draw_room_names: bool,

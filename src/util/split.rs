@@ -1,5 +1,7 @@
-use std::{collections::HashMap, ops::{Deref, DerefMut}};
-
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+};
 
 pub struct SplitWrapper<'a, K: Eq + std::hash::Hash, V> {
     pub key: Option<K>,
