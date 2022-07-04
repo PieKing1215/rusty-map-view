@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ggez::{graphics::{Rect, self, DrawParam, StrokeOptions, Color, Drawable, Font, PxScale}, GameResult};
 use json::JsonValue;
 
-use crate::util::{transform_stack::TransformStack, color_ext::ColorExt};
+use crate::{util::{transform_stack::TransformStack, color_ext::ColorExt}, settings::Settings};
 
 use super::{item::Item, transition::Transition, RandoData};
 
@@ -63,19 +63,21 @@ impl Room {
         }
     }
 
-    pub fn draw(&mut self, ctx: &mut ggez::Context, mut transform: TransformStack, key: &String, rando_data: &RandoData, asset_cache: &HashMap<String, graphics::Image>, hovered: bool, selected: bool, highlight_path: &Option<Vec<String>>) -> GameResult {
+    pub fn draw(&mut self, ctx: &mut ggez::Context, mut transform: TransformStack, key: &String, rando_data: &RandoData, asset_cache: &HashMap<String, graphics::Image>, hovered: bool, selected: bool, highlight_path: &Option<Vec<String>>, settings: &Settings) -> GameResult {
         let bounds = self.calc_bounds();
 
-        let rect = graphics::Mesh::new_circle(
-            ctx, 
-            graphics::DrawMode::Stroke(StrokeOptions::default()), 
-            [0.0, 0.0], 
-            2.0,
-            1.0,
-            graphics::Color::from_rgba(255, 0, 0, 255)
-        )?;
+        if settings.debug_show_room_origins {
+            let rect = graphics::Mesh::new_circle(
+                ctx, 
+                graphics::DrawMode::Stroke(StrokeOptions::default()), 
+                [0.0, 0.0], 
+                2.0,
+                1.0,
+                graphics::Color::from_rgba(255, 0, 0, 255)
+            )?;
 
-        graphics::draw(ctx, &rect, &transform)?;
+            graphics::draw(ctx, &rect, &transform)?;
+        }
 
 
         transform.translate(0.0, bounds.h);
@@ -138,16 +140,18 @@ impl Room {
 
         graphics::draw(ctx, &rect, &transform)?;
 
-        let rect = graphics::Mesh::new_circle(
-            ctx, 
-            graphics::DrawMode::Stroke(StrokeOptions::default()), 
-            [0.0, 0.0], 
-            2.0,
-            1.0,
-            graphics::Color::from_rgba(0, 0, 255, 255)
-        )?;
+        if settings.debug_show_room_origins {
+            let rect = graphics::Mesh::new_circle(
+                ctx, 
+                graphics::DrawMode::Stroke(StrokeOptions::default()), 
+                [0.0, 0.0], 
+                2.0,
+                1.0,
+                graphics::Color::from_rgba(0, 0, 255, 255)
+            )?;
 
-        graphics::draw(ctx, &rect, &transform)?;
+            graphics::draw(ctx, &rect, &transform)?;
+        }
         
         
         let rect = graphics::Mesh::new_circle(
@@ -284,12 +288,13 @@ impl Room {
         }
 
         // room name
-
-        transform.push();
-        transform.translate(bounds.x, bounds.y + bounds.h);
-        // TODO: cache
-        graphics::Text::new(key.clone()).set_font(Font::default(), PxScale::from(12.0)).draw(ctx, (&transform).into())?;
-        transform.pop();
+        if settings.draw_room_names {
+            transform.push();
+            transform.translate(bounds.x, bounds.y + bounds.h);
+            // TODO: cache
+            graphics::Text::new(key.clone()).set_font(Font::default(), PxScale::from(12.0)).draw(ctx, (&transform).into())?;
+            transform.pop();
+        }
 
         Ok(())
     }

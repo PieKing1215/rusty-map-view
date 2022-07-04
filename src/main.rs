@@ -1,6 +1,7 @@
 pub mod data;
 pub mod state;
 pub mod util;
+pub mod settings;
 
 use std::{sync::mpsc::{self, Receiver, SyncSender}, thread::JoinHandle, collections::{HashMap, HashSet, BTreeSet}, time::Instant};
 
@@ -13,6 +14,7 @@ use ggez::{
 use ggez_egui::EguiBackend;
 use json::JsonValue;
 use parity_ws::{Message, Sender};
+use settings::Settings;
 use util::{transform_stack::TransformStack, split::GetSplit, color_ext::ColorExt};
 
 use crate::{state::{GameState, LoadedState, Camera, CameraTarget}, data::{RandoData, transition::Transition}, util::rect_ext::RectExt};
@@ -33,6 +35,8 @@ struct MainState {
     path_target: Option<String>,
     highlight_path: Option<Vec<String>>,
     egui_backend: EguiBackend,
+    egui_ctx: Option<egui::Context>,
+    settings: Settings,
 }
 
 impl MainState {
@@ -82,7 +86,8 @@ impl MainState {
             }
         });
 
-        Ok(MainState { pos_x: 0.0, circle, recv, shutdown: send_shutdown, listen_thread: Some(listen_thread), shutdown_thread: Some(shutdown_thread), game_state: GameState::Unloaded, map_data, last_transition_time: Instant::now(), asset_cache: HashMap::new(), click_start_x: 0.0, click_start_y: 0.0, path_target: None, highlight_path: None, egui_backend: EguiBackend::default() })
+        let mut egui_backend = EguiBackend::default();
+        Ok(MainState { pos_x: 0.0, circle, recv, shutdown: send_shutdown, listen_thread: Some(listen_thread), shutdown_thread: Some(shutdown_thread), game_state: GameState::Unloaded, map_data, last_transition_time: Instant::now(), asset_cache: HashMap::new(), click_start_x: 0.0, click_start_y: 0.0, path_target: None, highlight_path: None, settings: Settings::default(), egui_ctx: None, egui_backend })
     }
 
     fn on_message(&mut self, json: JsonValue, ctx: &mut Context) -> GameResult {
@@ -437,10 +442,15 @@ impl MainState {
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let egui_ctx = self.egui_backend.ctx();
+        self.egui_ctx = Some((&*egui_ctx).clone());
 		egui::Window::new("Rusty Map View").show(&egui_ctx, |ui| {
 			if ui.button("quit").clicked() {
 				ggez::event::quit(ctx);
 			}
+		});
+
+		egui::Window::new("All Settings").show(&egui_ctx, |ui| {
+			self.settings.fill_debug_egui(ui);
 		});
 
         self.pos_x = self.pos_x % 800.0 + 1.0;
@@ -472,7 +482,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
             let mut render_rooms = BTreeSet::new();
             render_rooms.insert(state.current_room.clone());
-            let depth = 2;
+            let depth = self.settings.depth;
             for _ in 0..depth {
                 for key in render_rooms.clone() {
                     if let Some(room) = self.map_data.rooms.get(&key) {
@@ -508,7 +518,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     let (x, y) = state.rando_data.room_positions.entry(key.clone()).or_insert_with(|| (0.0, 0.0)).clone();
                     transform.translate(x, y);
 
-                    cur_room.draw(ctx, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref() == Some(key), state.selected_room.as_ref() == Some(key), &self.highlight_path)?;
+                    cur_room.draw(ctx, transform.clone(), &key, &state.rando_data, &self.asset_cache, state.hovered_room.as_ref() == Some(key), state.selected_room.as_ref() == Some(key), &self.highlight_path, &self.settings)?;
 
                     for (k, tr) in &cur_room.transitions {
                         let transition = format!("{}[{k}]", key);
@@ -661,32 +671,34 @@ impl event::EventHandler<ggez::GameError> for MainState {
     ) {
         self.egui_backend.input.mouse_button_down_event(button);
 
-        self.click_start_x = x;
-        self.click_start_y = y;
+        if !self.egui_ctx.as_ref().map_or(false, |ectx| ectx.wants_pointer_input()) {
+            self.click_start_x = x;
+            self.click_start_y = y;
 
-        if button == MouseButton::Left {
-            let hovered_room = self.get_room_at_window_position(ctx, [x, y]).cloned();
+            if button == MouseButton::Left {
+                let hovered_room = self.get_room_at_window_position(ctx, [x, y]).cloned();
 
-            if let GameState::Loaded(state) = &mut self.game_state {
-                state.dragging_room = true;
+                if let GameState::Loaded(state) = &mut self.game_state {
+                    state.dragging_room = true;
 
-                state.hovered_room = hovered_room;
-                state.selected_room = state.hovered_room.clone();
-            }
-        } else if button == MouseButton::Right {
-            let hovered_room = self.get_room_at_window_position(ctx, [x, y]).cloned();
+                    state.hovered_room = hovered_room;
+                    state.selected_room = state.hovered_room.clone();
+                }
+            } else if button == MouseButton::Right {
+                let hovered_room = self.get_room_at_window_position(ctx, [x, y]).cloned();
 
-            if let GameState::Loaded(state) = &mut self.game_state {
-                state.hovered_room = hovered_room;
-                self.path_target = state.hovered_room.clone();
-                let src = state.selected_room.clone().unwrap_or(state.current_room.clone());
-                let dst = self.path_target.clone();
-                self.highlight_path = dst.and_then(|dst| self.find_path(&src, &dst));
+                if let GameState::Loaded(state) = &mut self.game_state {
+                    state.hovered_room = hovered_room;
+                    self.path_target = state.hovered_room.clone();
+                    let src = state.selected_room.clone().unwrap_or(state.current_room.clone());
+                    let dst = self.path_target.clone();
+                    self.highlight_path = dst.and_then(|dst| self.find_path(&src, &dst));
 
-                // state.selected_room = state.hovered_room.clone();
-                // if let Some(r) = state.hovered_room.clone() {
-                //     state.camera.target = CameraTarget::Room(r);
-                // }
+                    // state.selected_room = state.hovered_room.clone();
+                    // if let Some(r) = state.hovered_room.clone() {
+                    //     state.camera.target = CameraTarget::Room(r);
+                    // }
+                }
             }
         }
     }
@@ -709,9 +721,11 @@ impl event::EventHandler<ggez::GameError> for MainState {
         //     }
         // }
 
-        if button == MouseButton::Left {
-            if let GameState::Loaded(state) = &mut self.game_state {
-                state.dragging_room = false;
+        if !self.egui_ctx.as_ref().map_or(false, |ectx| ectx.wants_pointer_input()) {
+            if button == MouseButton::Left {
+                if let GameState::Loaded(state) = &mut self.game_state {
+                    state.dragging_room = false;
+                }
             }
         }
     }
@@ -726,12 +740,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
     ) {
         self.egui_backend.input.mouse_motion_event(x, y);
 
-        if let GameState::Loaded(state) = &mut self.game_state {
-            if ggez::input::mouse::button_pressed(ctx, MouseButton::Left) {
-                if let Some(sel_room) = &state.selected_room {
-                    if let Some((x, y)) = state.rando_data.room_positions.get_mut(sel_room) {
-                        *x += dx;
-                        *y += dy;
+        if !self.egui_ctx.as_ref().map_or(false, |ectx| ectx.wants_pointer_input()) {
+            if let GameState::Loaded(state) = &mut self.game_state {
+                if ggez::input::mouse::button_pressed(ctx, MouseButton::Left) {
+                    if let Some(sel_room) = &state.selected_room {
+                        if let Some((x, y)) = state.rando_data.room_positions.get_mut(sel_room) {
+                            *x += dx;
+                            *y += dy;
+                        }
                     }
                 }
             }
